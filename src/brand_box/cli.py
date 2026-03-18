@@ -284,11 +284,12 @@ def cmd_video(args: argparse.Namespace) -> None:
 
     # Step 2: Images (unless --no-images)
     image_paths = {}
+    img_dir = dirs["videos"] / f"images_{fmt_id}"
+    img_dir.mkdir(parents=True, exist_ok=True)
+
     if not args.no_images:
         _print("Generating visuals…")
         from brand_box.generators.image_backend import generate_image
-        img_dir = dirs["videos"] / f"images_{fmt_id}"
-        img_dir.mkdir(parents=True, exist_ok=True)
 
         for seg in script.get("segments", []):
             idx = seg["index"]
@@ -305,19 +306,38 @@ def cmd_video(args: argparse.Namespace) -> None:
                 _print(f"  Image {idx + 1} ✓")
             except Exception as e:
                 _print(f"  Image {idx + 1} failed: {e}")
+    else:
+        # --no-images: reuse existing images from previous runs
+        for seg in script.get("segments", []):
+            idx = seg["index"]
+            img_path = img_dir / f"img_{idx}.png"
+            if img_path.is_file():
+                image_paths[idx] = str(img_path)
+        if image_paths:
+            _print(f"Reusing {len(image_paths)} cached images")
 
     # Step 3: Audio (unless --no-audio)
     audio_paths: dict = {"segments": {}, "full": ""}
+    audio_dir = dirs["videos"] / f"audio_{fmt_id}"
     if not args.no_audio:
         _print("Generating narration…")
         try:
             from brand_box.generators.audio import AudioGenerator
             audio_gen = AudioGenerator(cache_dir=str(dirs["videos"] / ".audio_cache"))
-            audio_dir = dirs["videos"] / f"audio_{fmt_id}"
             audio_paths = audio_gen.generate_from_script(script, str(audio_dir))
             _print(f"  Audio segments: {len(audio_paths.get('segments', {}))}")
         except Exception as e:
             _print(f"  Audio skipped: {e}")
+    else:
+        # --no-audio: reuse existing audio from previous runs
+        full_path = audio_dir / "full_narration.mp3"
+        if full_path.is_file():
+            audio_paths["full"] = str(full_path)
+            for seg in script.get("segments", []):
+                seg_path = audio_dir / f"seg_{seg['index']}.mp3"
+                if seg_path.is_file():
+                    audio_paths["segments"][seg["index"]] = str(seg_path)
+            _print(f"Reusing cached audio ({len(audio_paths['segments'])} segments)")
 
     # Step 4: Assemble video
     _print("Assembling video…")
