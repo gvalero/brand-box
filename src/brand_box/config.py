@@ -33,7 +33,18 @@ AZURE_OPENAI_KEY: str = os.environ.get("AZURE_OPENAI_KEY", "")
 AZURE_OPENAI_DEPLOYMENT_GPT: str = os.environ.get("AZURE_OPENAI_DEPLOYMENT_GPT", "gpt-4o")
 
 # ---------------------------------------------------------------------------
-# Azure Speech (optional — for video narration TTS)
+# Manus AI (primary video generation — agent-based)
+# ---------------------------------------------------------------------------
+MANUS_API_KEY: str = os.environ.get("MANUS_API_KEY", "")
+MANUS_API_BASE: str = os.environ.get("MANUS_API_BASE", "https://api.manus.ai")
+
+# ---------------------------------------------------------------------------
+# ElevenLabs (primary TTS — high-quality voice)
+# ---------------------------------------------------------------------------
+ELEVENLABS_API_KEY: str = os.environ.get("ELEVENLABS_API_KEY", "")
+
+# ---------------------------------------------------------------------------
+# Azure Speech (fallback TTS — for video narration)
 # ---------------------------------------------------------------------------
 AZURE_SPEECH_KEY: str = os.environ.get("AZURE_SPEECH_KEY", "")
 AZURE_SPEECH_REGION: str = os.environ.get("AZURE_SPEECH_REGION", "westeurope")

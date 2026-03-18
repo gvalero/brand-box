@@ -224,13 +224,48 @@ def cmd_video(args: argparse.Namespace) -> None:
     if not project:
         return
 
+    name = project.name or (project.name_candidates[0] if project.name_candidates else "Brand")
+    dirs = project.ensure_output_dirs()
+    fmt_id = args.format or "teaser"
+
+    identity_ctx = ""
+    if project.identity and project.identity.tone:
+        identity_ctx = (
+            f"Tone: {project.identity.tone}. "
+            f"Colors: {project.identity.primary_color}, {project.identity.secondary_color}, {project.identity.accent_color}. "
+            f"Tagline: {project.identity.tagline}."
+        )
+
+    output_path = str(dirs["videos"] / f"video_{fmt_id}.mp4")
+
+    # --- Try Manus first (superior quality) ---
+    if not args.local:
+        try:
+            from brand_box.generators.manus_video import ManusVideoGenerator
+            from brand_box.config import MANUS_API_KEY
+            if MANUS_API_KEY:
+                _print("Generating video via Manus AI…")
+                manus = ManusVideoGenerator()
+                logo_path = project.metadata.get("chosen_logo") or (project.logo_paths[0] if project.logo_paths else None)
+                result_path = manus.generate_video(
+                    brand_name=name,
+                    concept=project.concept,
+                    format_id=fmt_id,
+                    identity_context=identity_ctx,
+                    output_path=output_path,
+                    logo_path=logo_path,
+                )
+                project.video_paths.append(result_path)
+                project.save(Path.cwd() / "brand.json")
+                _success(f"Video saved to {result_path}")
+                return
+        except Exception as e:
+            _print(f"  Manus failed: {e} — falling back to local pipeline")
+
+    # --- Local pipeline fallback ---
     from brand_box.generators.script import ScriptGenerator, BUILTIN_FORMATS
     from brand_box.generators.video import VideoAssembler
 
-    name = project.name or (project.name_candidates[0] if project.name_candidates else "Brand")
-    dirs = project.ensure_output_dirs()
-
-    fmt_id = args.format or "teaser"
     if fmt_id not in BUILTIN_FORMATS:
         _error(f"Unknown format: {fmt_id}. Available: {list(BUILTIN_FORMATS.keys())}")
         sys.exit(1)
@@ -238,10 +273,6 @@ def cmd_video(args: argparse.Namespace) -> None:
     # Step 1: Script
     _print(f"Generating script ({fmt_id} format)…")
     script_gen = ScriptGenerator()
-    identity_ctx = ""
-    if project.identity and project.identity.tone:
-        identity_ctx = f"Tone: {project.identity.tone}. Colors: {project.identity.primary_color}, {project.identity.accent_color}."
-
     script = script_gen.generate_script(
         brand_name=name,
         concept=project.concept,
@@ -263,7 +294,7 @@ def cmd_video(args: argparse.Namespace) -> None:
             idx = seg["index"]
             desc = seg.get("visual_description", "Abstract brand visual")
             prompt = (
-                f"Social media video illustration. "
+                f"Social media video illustration, NO TEXT, NO WORDS, NO LETTERS in the image. "
                 f"Brand: {name}. Style: warm, colorful, professional. "
                 f"Scene: {desc}"
             )
@@ -303,7 +334,6 @@ def cmd_video(args: argparse.Namespace) -> None:
 
     assembler = VideoAssembler(brand_colors=colors if colors else None)
     tagline = project.identity.tagline if project.identity else ""
-    output_path = str(dirs["videos"] / f"video_{fmt_id}.mp4")
 
     try:
         result_path = assembler.assemble_video(
@@ -314,6 +344,8 @@ def cmd_video(args: argparse.Namespace) -> None:
             brand_name=name,
             tagline=tagline,
         )
+        project.video_paths.append(result_path)
+        project.save(Path.cwd() / "brand.json")
         _success(f"Video saved to {result_path}")
     except Exception as e:
         _error(f"Video assembly failed: {e}")
@@ -376,8 +408,9 @@ def build_parser() -> argparse.ArgumentParser:
     # video
     p_video = sub.add_parser("video", help="Generate social media video content")
     p_video.add_argument("--format", choices=["teaser", "explainer", "testimonial", "fact", "founder"], help="Content format")
-    p_video.add_argument("--no-images", action="store_true", help="Skip AI image generation (text slides only)")
-    p_video.add_argument("--no-audio", action="store_true", help="Skip audio generation (silent video)")
+    p_video.add_argument("--local", action="store_true", help="Force local pipeline (skip Manus)")
+    p_video.add_argument("--no-images", action="store_true", help="Skip AI image generation (local pipeline only)")
+    p_video.add_argument("--no-audio", action="store_true", help="Skip audio generation (local pipeline only)")
 
     return parser
 
