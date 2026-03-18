@@ -1,14 +1,15 @@
 """
 CLI entry point for brand-box.
 
-Usage:
-    brand-box init <concept>
-    brand-box name [--count N]
-    brand-box logo [--name NAME]
-    brand-box identity
-    brand-box website
-    brand-box social
-    brand-box video [--format FORMAT]
+Usage (recommended order):
+    brand-box init <concept>      — start a new brand project
+    brand-box name [--count N]    — generate name candidates
+    brand-box identity            — generate colors, fonts, tone
+    brand-box logo [--name NAME]  — generate logo options
+    brand-box kit                 — generate brand guidelines (after locking name + logo)
+    brand-box website             — generate a landing page
+    brand-box social              — generate social media assets
+    brand-box video [--format]    — generate social media video
 """
 
 from __future__ import annotations
@@ -77,6 +78,7 @@ def cmd_init(args: argparse.Namespace) -> None:
     _print("  brand-box name     — generate name candidates")
     _print("  brand-box identity — generate brand identity")
     _print("  brand-box logo     — generate logo options")
+    _print("  brand-box kit      — generate brand guidelines")
 
 
 def cmd_name(args: argparse.Namespace) -> None:
@@ -197,6 +199,23 @@ def cmd_social(args: argparse.Namespace) -> None:
     pics = result.get("profile_pics", {})
     banners = result.get("banners", {})
     _success(f"{len(pics)} profile pic(s) + {len(banners)} banner(s) saved to {dirs['social']}")
+
+
+def cmd_kit(args: argparse.Namespace) -> None:
+    """Generate a brand guidelines / brand kit page."""
+    project = _load_project()
+    if not project:
+        return
+
+    from brand_box.generators.kit import KitGenerator
+    gen = KitGenerator()
+    dirs = project.ensure_output_dirs()
+
+    _print("Generating brand guidelines…")
+    path = gen.generate(project=project, output_dir=str(dirs["identity"]))
+    project.metadata["kit_path"] = path
+    project.save(Path.cwd() / "brand.json")
+    _success(f"Brand guidelines saved to {path}")
 
 
 def cmd_video(args: argparse.Namespace) -> None:
@@ -344,6 +363,9 @@ def build_parser() -> argparse.ArgumentParser:
     # identity
     sub.add_parser("identity", help="Generate brand identity (colors, fonts, tone)")
 
+    # kit (after locking name + identity + logo)
+    sub.add_parser("kit", help="Generate brand guidelines / brand kit page")
+
     # website
     sub.add_parser("website", help="Generate a landing page")
 
@@ -369,6 +391,7 @@ def main() -> None:
         "name": cmd_name,
         "logo": cmd_logo,
         "identity": cmd_identity,
+        "kit": cmd_kit,
         "website": cmd_website,
         "social": cmd_social,
         "video": cmd_video,

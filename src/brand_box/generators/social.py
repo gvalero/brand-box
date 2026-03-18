@@ -188,27 +188,26 @@ Return ONLY valid JSON."""
             return {p: f"{name} — {identity.tagline if identity else project.concept}" for p in platforms}
 
     def _generate_profile_pic_ai(self, project: BrandProject, size: tuple[int, int], output_path: str) -> None:
-        """Generate profile pic via Gemini image generation."""
-        from brand_box.generators.image_backend import generate_image
+        """Create profile pic from the chosen logo, resized for the platform."""
+        # Use the chosen logo if available — profile pics should be consistent
+        logo_path = self._get_logo_path(project)
+        if logo_path:
+            img = Image.open(logo_path).convert("RGBA")
+            # Fit logo into a square canvas with brand background color
+            bg_color = self._hex_to_rgb(
+                project.identity.background_color if project.identity and project.identity.background_color else "#FFFFFF"
+            )
+            canvas = Image.new("RGBA", (max(img.size), max(img.size)), (*bg_color, 255))
+            # Center the logo
+            x = (canvas.width - img.width) // 2
+            y = (canvas.height - img.height) // 2
+            canvas.paste(img, (x, y), img if img.mode == "RGBA" else None)
+            canvas = canvas.resize(size, Image.LANCZOS)
+            canvas.save(output_path, "PNG")
+            return
 
-        identity = project.identity
-        name = project.name or "Brand"
-        color_hint = f"Use colors: {identity.primary_color}, {identity.accent_color}." if identity and identity.primary_color else ""
-
-        prompt = (
-            f"Design a professional social media profile picture / app icon for '{name}'. "
-            f"Product: {project.concept}. "
-            f"Style: modern, clean, rounded, recognizable at small sizes. "
-            f"{color_hint} "
-            f"Square format, no text, just a memorable graphic symbol."
-        )
-
-        generate_image(prompt, output_path)
-
-        # Resize to target
-        img = Image.open(output_path)
-        img = img.resize(size, Image.LANCZOS)
-        img.save(output_path, "PNG")
+        # Fallback to template if no logo exists
+        self._generate_profile_pic_template(project, size, output_path)
 
     def _generate_profile_pic_template(
         self, project: BrandProject, size: tuple[int, int], output_path: str
@@ -338,6 +337,19 @@ Return ONLY valid JSON."""
             except json.JSONDecodeError:
                 pass
         return {p: f"{name} — {concept}" for p in platforms}
+
+    @staticmethod
+    def _get_logo_path(project: BrandProject) -> str | None:
+        """Return the path to the chosen logo, if it exists on disk."""
+        # Check metadata for explicit choice first
+        chosen = project.metadata.get("chosen_logo", "")
+        if chosen and Path(chosen).is_file():
+            return chosen
+        # Fall back to first logo in list
+        for p in project.logo_paths:
+            if Path(p).is_file():
+                return p
+        return None
 
     @staticmethod
     def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
