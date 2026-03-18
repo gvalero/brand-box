@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StoryGlow — Storytime That Holds Their Attention</title>
+  <meta name="description" content="StoryGlow helps tired parents make storytime easier and more engaging, with expressive narration, character voices, and sound effects." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #FF6F61;
+      --secondary: #FFD966;
+      --accent: #6CCFF6;
+      --bg: #FFF8E1;
+      --text: #4A4A4A;
+      --white: #ffffff;
+      --shadow: 0 20px 50px rgba(74, 74, 74, 0.12);
+      --radius: 24px;
+      --max: 1180px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: 'Quicksand', system-ui, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(255, 217, 102, 0.22), transparent 32%),
+        linear-gradient(180deg, #fffef9 0%, var(--bg) 100%);
+    }
+
+    h1, h2, h3, h4, .btn, .eyebrow, .stat-number {
+      font-family: 'Poppins', system-ui, sans-serif;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    .container {
+      width: min(calc(100% - 32px), var(--max));
+      margin: 0 auto;
+    }
+
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background: rgba(255, 248, 225, 0.86);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255, 111, 97, 0.12);
+    }
+
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: 'Poppins', system-ui, sans-serif;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-badge {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--primary), #ff9a90);
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-size: 1.2rem;
+      box-shadow: var(--shadow);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      font-weight: 700;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 14px 22px;
+      border-radius: 999px;
+      border: none;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform .18s ease, box-shadow .18s ease;
+    }
+
+    .btn:hover { transform: translateY(-2px); }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 14px 32px rgba(255, 111, 97, 0.30);
+    }
+
+    .btn-secondary {
+      background: #fff;
+      color: var(--text);
+      border: 2px solid rgba(74,74,74,0.08);
+    }
+
+    .hero {
+      padding: 56px 0 32px;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 28px;
+      align-items: center;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(255, 111, 97, 0.12);
+      color: var(--primary);
+      font-size: 0.85rem;
+      font-weight: 700;
+      margin-bottom: 14px;
+    }
+
+    .hero h1 {
+      margin: 0 0 14px;
+      font-size: clamp(2.5rem, 5.8vw, 4.7rem);
+      line-height: 0.98;
+      letter-spacing: -0.04em;
+      color: #333;
+      max-width: 12ch;
+    }
+
+    .hero p.lead {
+      margin: 0 0 20px;
+      font-size: clamp(1.05rem, 2vw, 1.22rem);
+      line-height: 1.75;
+      max-width: 62ch;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .microcopy {
+      font-size: 0.95rem;
+      color: #666;
+      font-weight: 700;
+    }
+
+    .panel {
+      background: #fff;
+      border-radius: 28px;
+      padding: 24px;
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(74,74,74,0.05);
+    }
+
+    .hero-demo {
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+      min-height: 440px;
+      display: grid;
+      align-items: center;
+    }
+
+    .hero-demo::before {
+      content: "";
+      position: absolute;
+      inset: auto auto -70px -60px;
+      width: 220px;
+      height: 220px;
+      border-radius: 50%;
+      background: rgba(108, 207, 246, 0.18);
+    }
+
+    .hero-demo::after {
+      content: "";
+      position: absolute;
+      inset: 18px 18px auto auto;
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: rgba(255, 217, 102, 0.25);
+    }
+
+    .phone {
+      position: relative;
+      width: min(100%, 340px);
+      margin: 0 auto;
+      background: #1f1f1f;
+      border-radius: 34px;
+      padding: 10px;
+      box-shadow: 0 22px 50px rgba(0,0,0,0.18);
+    }
+
+    .phone-screen {
+      background: linear-gradient(180deg, #fffaf2 0%, #ffffff 100%);
+      border-radius: 26px;
+      min-height: 540px;
+      overflow: hidden;
+      border: 1px solid rgba(74,74,74,0.06);
+    }
+
+    .screen-top {
+      padding: 18px 18px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 700;
+      font-size: 0.85rem;
+    }
+
+    .video-frame {
+      margin: 0 14px;
+      border-radius: 22px;
+      background: linear-gradient(135deg, #fff, #fff6e3);
+      border: 1px solid rgba(74,74,74,0.08);
+      padding: 16px;
+      min-height: 290px;
+      position: relative;
+    }
+
+    .video-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 111, 97, 0.12);
+      color: var(--primary);
+      font-weight: 700;
+      font-size: 0.8rem;
+    }
+
+    .book-box {
+      position: absolute;
+      inset: 72px 18px 18px 18px;
+      background: #fff;
+      border-radius: 18px;
+      border: 1px solid rgba(74,74,74,0.08);
+      display: grid;
+      place-items: center;
+      color: #777;
+      text-align: center;
+      padding: 14px;
+      font-weight: 700;
+      line-height: 1.6;
+    }
+
+    .reactions {
+      padding: 16px 18px 18px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .reaction {
+      background: rgba(108, 207, 246, 0.10);
+      border-radius: 16px;
+      padding: 12px 14px;
+      font-size: 0.92rem;
+      font-weight: 700;
+    }
+
+    .section {
+      padding: 34px 0;
+    }
+
+    .section-heading {
+      text-align: center;
+      max-width: 760px;
+      margin: 0 auto 26px;
+    }
+
+    .section-heading h2 {
+      margin: 0 0 10px;
+      font-size: clamp(2rem, 4vw, 3rem);
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+    }
+
+    .section-heading p {
+      margin: 0;
+      font-size: 1.08rem;
+      line-height: 1.75;
+    }
+
+    .pain-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+
+    .pain-card, .benefit-card, .faq-item, .quote, .step-card, .stat-card {
+      background: #fff;
+      border-radius: 22px;
+      padding: 22px;
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(74,74,74,0.05);
+    }
+
+    .pain-card h3, .benefit-card h3, .step-card h3 {
+      margin: 0 0 8px;
+      font-size: 1.18rem;
+    }
+
+    .icon {
+      width: 54px;
+      height: 54px;
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      font-size: 1.45rem;
+      margin-bottom: 14px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+      margin-top: 18px;
+    }
+
+    .stat-card {
+      text-align: center;
+      background: linear-gradient(180deg, #fff, #fff9ef);
+    }
+
+    .stat-number {
+      font-size: clamp(2rem, 5vw, 3rem);
+      line-height: 1;
+      letter-spacing: -0.04em;
+      color: var(--primary);
+      margin-bottom: 8px;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+
+    .step-number {
+      width: 42px;
+      height: 42px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: var(--secondary);
+      color: #6a5600;
+      font-weight: 800;
+      margin-bottom: 14px;
+      font-family: 'Poppins', system-ui, sans-serif;
+    }
+
+    .benefits-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 18px;
+    }
+
+    .quote-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+
+    .quote {
+      position: relative;
+      font-size: 1rem;
+      line-height: 1.75;
+    }
+
+    .quote::before {
+      content: "“";
+      position: absolute;
+      top: 10px;
+      left: 14px;
+      font-size: 3rem;
+      line-height: 1;
+      color: rgba(255,111,97,0.16);
+      font-family: Georgia, serif;
+    }
+
+    .quote footer {
+      margin-top: 14px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .faq {
+      display: grid;
+      gap: 16px;
+    }
+
+    .faq-item h3 {
+      margin: 0 0 8px;
+      font-size: 1.05rem;
+    }
+
+    .cta {
+      background: linear-gradient(135deg, rgba(255, 111, 97, 0.08), rgba(108, 207, 246, 0.12));
+    }
+
+    .cta-grid {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 22px;
+      align-items: center;
+    }
+
+    .form {
+      background: #fff;
+      border-radius: 22px;
+      padding: 20px;
+      box-shadow: var(--shadow);
+      display: grid;
+      gap: 12px;
+    }
+
+    .form label {
+      font-weight: 700;
+      font-size: 0.94rem;
+    }
+
+    .form input {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1.5px solid rgba(74,74,74,0.12);
+      font: inherit;
+    }
+
+    .form small {
+      color: #666;
+      line-height: 1.6;
+    }
+
+    footer.site-footer {
+      padding: 30px 0 50px;
+      text-align: center;
+      color: #777;
+      font-weight: 700;
+    }
+
+    @media (max-width: 960px) {
+      .hero-grid,
+      .pain-grid,
+      .stats,
+      .steps,
+      .benefits-grid,
+      .quote-grid,
+      .cta-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .nav-links a:not(.btn) { display: none; }
+      .hero h1 { max-width: none; }
+    }
+
+    @media (max-width: 640px) {
+      .hero { padding-top: 34px; }
+      .hero-demo { min-height: auto; }
+      .phone-screen { min-height: auto; }
+      .video-frame { min-height: 250px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <div class="container nav-inner">
+      <a href="#top" class="brand">
+        <span class="brand-badge">✨</span>
+        <span>StoryGlow</span>
+      </a>
+      <nav class="nav-links">
+        <a href="#why">Why StoryGlow</a>
+        <a href="#how">How it works</a>
+        <a href="#waitlist" class="btn btn-primary">Get Early Access</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="container hero-grid">
+        <div>
+          <div class="eyebrow">😮‍💨 Built for tired parents and busy bedtimes</div>
+          <h1>Storytime that actually holds their attention</h1>
+          <p class="lead">
+            StoryGlow helps make bedtime easier with expressive narration, character voices,
+            and sound effects that keep kids engaged — while still keeping the parent at the center of the moment.
+          </p>
+          <div class="hero-actions">
+            <a href="#waitlist" class="btn btn-primary">Get Early Access</a>
+            <a href="#how" class="btn btn-secondary">See how it works</a>
+          </div>
+          <div class="microcopy">For families with kids aged 3–6 · No screens required · Built to support storytime, not replace it</div>
+        </div>
+
+        <div class="panel hero-demo">
+          <div class="phone">
+            <div class="phone-screen">
+              <div class="screen-top">
+                <span>StoryGlow demo</span>
+                <span>20s</span>
+              </div>
+              <div class="video-frame">
+                <div class="video-label">🎥 Demo placeholder</div>
+                <div class="book-box">
+                  Replace this area with your short demo video.<br>
+                  Best version: child + parent + real book + a visible reaction moment.
+                </div>
+              </div>
+              <div class="reactions">
+                <div class="reaction">“My child stayed with the story the whole way through.”</div>
+                <div class="reaction">“This made bedtime easier tonight.”</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="why">
+      <div class="container">
+        <div class="section-heading">
+          <h2>Why StoryGlow exists</h2>
+          <p>
+            Bedtime can be beautiful — but it can also be chaotic. StoryGlow was designed to solve the real problems families face at the end of the day.
+          </p>
+        </div>
+
+        <div class="pain-grid">
+          <article class="pain-card">
+            <div class="icon" style="background: rgba(255,111,97,0.14);">😵</div>
+            <h3>Parents are exhausted</h3>
+            <p>At the end of the day, even good things can feel heavy. StoryGlow helps without taking the moment away.</p>
+          </article>
+
+          <article class="pain-card">
+            <div class="icon" style="background: rgba(255,217,102,0.22);">🤸</div>
+            <h3>Kids lose focus fast</h3>
+            <p>Some children drift after a few pages. StoryGlow adds enough wonder to help them stay with the story longer.</p>
+          </article>
+
+          <article class="pain-card">
+            <div class="icon" style="background: rgba(108,207,246,0.18);">📱</div>
+            <h3>Screens keep winning</h3>
+            <p>Books deserve better than being the boring option. StoryGlow helps make storytime feel exciting again.</p>
+          </article>
+        </div>
+
+        <div class="stats">
+          <div class="stat-card">
+            <div class="stat-number">1</div>
+            <div>shared bedtime moment parents actually want to repeat</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number">0</div>
+            <div>screens needed to make storytime feel magical</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number">3–6</div>
+            <div>ideal child age range for your first validation audience</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="how">
+      <div class="container">
+        <div class="section-heading">
+          <h2>How StoryGlow works</h2>
+          <p>
+            StoryGlow is built to be simple. No complicated setup. No distracting interface. Just a better way to enjoy books together.
+          </p>
+        </div>
+
+        <div class="steps">
+          <article class="step-card">
+            <div class="step-number">1</div>
+            <h3>Pick a book</h3>
+            <p>Open your child’s favorite story and get ready for bedtime as normal.</p>
+          </article>
+
+          <article class="step-card">
+            <div class="step-number">2</div>
+            <h3>Start StoryGlow</h3>
+            <p>StoryGlow begins reading with warm narration, character voices, and sound effects.</p>
+          </article>
+
+          <article class="step-card">
+            <div class="step-number">3</div>
+            <h3>Enjoy the moment together</h3>
+            <p>Your child stays engaged, and you stay part of the story instead of being pushed out by technology.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <div class="section-heading">
+          <h2>What makes it better than “just reading aloud”</h2>
+          <p>
+            StoryGlow is not about replacing the parent voice. It is about helping the moment feel fuller, easier, and more immersive.
+          </p>
+        </div>
+
+        <div class="benefits-grid">
+          <article class="benefit-card">
+            <div class="icon" style="background: rgba(255,111,97,0.14);">🎭</div>
+            <h3>Character voices with personality</h3>
+            <p>Different characters sound different, which helps children follow the story and stay curious.</p>
+          </article>
+
+          <article class="benefit-card">
+            <div class="icon" style="background: rgba(108,207,246,0.18);">🔔</div>
+            <h3>Sound effects that add wonder</h3>
+            <p>Just enough atmosphere to make pages feel alive, without overwhelming the child or the parent.</p>
+          </article>
+
+          <article class="benefit-card">
+            <div class="icon" style="background: rgba(255,217,102,0.22);">🤝</div>
+            <h3>Parents stay in the experience</h3>
+            <p>StoryGlow supports the moment. It is a helper, not a replacement.</p>
+          </article>
+
+          <article class="benefit-card">
+            <div class="icon" style="background: rgba(255,111,97,0.10);">💤</div>
+            <h3>Smoother bedtime routine</h3>
+            <p>When storytime feels easier and more engaging, bedtime gets less stressful for everyone.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <div class="section-heading">
+          <h2>What parents might say</h2>
+          <p>Use these placeholders until you gather real feedback from testers.</p>
+        </div>
+
+        <div class="quote-grid">
+          <blockquote class="quote">
+            This helped my child stay engaged much longer than our usual bedtime story.
+            <footer>— Early parent tester</footer>
+          </blockquote>
+
+          <blockquote class="quote">
+            I liked that it supported storytime without making me feel unnecessary.
+            <footer>— Early parent tester</footer>
+          </blockquote>
+
+          <blockquote class="quote">
+            It felt like a calmer, easier bedtime — and that matters a lot in our house.
+            <footer>— Early parent tester</footer>
+          </blockquote>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <div class="section-heading">
+          <h2>Questions parents will ask</h2>
+          <p>Good landing pages remove objections before someone has to ask them out loud.</p>
+        </div>
+
+        <div class="faq">
+          <div class="faq-item">
+            <h3>Does StoryGlow replace the parent?</h3>
+            <p>No. StoryGlow is built to support storytime, not take it over. The goal is a shared moment, not a substitute.</p>
+          </div>
+
+          <div class="faq-item">
+            <h3>Does this use screens?</h3>
+            <p>No. StoryGlow is designed around keeping the magic in books, imagination, and togetherness.</p>
+          </div>
+
+          <div class="faq-item">
+            <h3>Who is it best for?</h3>
+            <p>Families with young children, especially those around ages 3–6, who want bedtime to feel easier and more engaging.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section cta" id="waitlist">
+      <div class="container">
+        <div class="panel cta-grid">
+          <div>
+            <div class="eyebrow">🚀 Early validation</div>
+            <h2 style="margin: 0 0 12px; font-size: clamp(2rem, 4vw, 3.1rem); line-height: 1.03; letter-spacing: -0.03em;">Join the waitlist for early access</h2>
+            <p style="margin: 0; font-size: 1.08rem; line-height: 1.75; max-width: 58ch;">
+              This version of the page is designed to validate the practical angle: less bedtime friction, better attention, more enjoyable family reading.
+              Connect the form to your email tool and start measuring real interest.
+            </p>
+          </div>
+
+          <form class="form" action="#" method="post">
+            <label for="name">Parent name</label>
+            <input id="name" name="name" type="text" placeholder="Your name" />
+
+            <label for="email">Email address</label>
+            <input id="email" name="email" type="email" placeholder="you@example.com" />
+
+            <label for="child-age">Child age</label>
+            <input id="child-age" name="child-age" type="text" placeholder="e.g. 3, 4, 5" />
+
+            <button class="btn btn-primary" type="submit">Get Early Access</button>
+            <small>Replace this form action with Tally, Mailchimp, ConvertKit, Beehiiv, or your preferred waitlist tool.</small>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      Built with ❤️ for families · StoryGlow ©
+    </div>
+  </footer>
+</body>
+</html>

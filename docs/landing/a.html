@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StoryGlow — Make Storytime Magical</title>
+  <meta name="description" content="StoryGlow brings children's books to life with interactive voice narration. Join the waitlist for kids ages 3–10.">
+
+  <!-- Social sharing meta tags -->
+  <meta property="og:title" content="StoryGlow — Make Storytime Magical">
+  <meta property="og:description" content="Bring children's books to life with interactive voice narration. Designed for kids ages 3–10 and the parents who love reading with them.">
+  <meta property="og:image" content="https://example.com/reading-companion-og.png">
+  <meta property="og:url" content="https://streadingcompanion.z6.web.core.windows.net/">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="StoryGlow — Make Storytime Magical">
+  <meta name="twitter:description" content="Bring children's books to life with interactive voice narration. Designed for kids ages 3–10.">
+  <meta name="twitter:image" content="https://example.com/reading-companion-og.png">
+
+  <style>
+    /* ── Reset & Base ──────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --clr-primary: #5b4fc7;
+      --clr-primary-light: #7e74d2;
+      --clr-accent: #f6a623;
+      --clr-accent-hover: #e5951a;
+      --clr-bg: #faf7f2;
+      --clr-bg-alt: #fff;
+      --clr-text: #3a3153;
+      --clr-text-light: #6e6483;
+      --clr-border: #e8e2f0;
+      --radius: 12px;
+      --shadow-sm: 0 2px 8px rgba(91,79,199,.08);
+      --shadow-md: 0 6px 24px rgba(91,79,199,.12);
+      --max-w: 1120px;
+      --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font);
+      color: var(--clr-text);
+      background: var(--clr-bg);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    img { max-width: 100%; display: block; }
+    a { color: var(--clr-primary); text-decoration: none; }
+
+    /* ── Utility ───────────────────────────────────────────────── */
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+
+    /* ── Scroll-triggered fade-in animation ────────────────────── */
+    .fade-in {
+      opacity: 0;
+      transform: translateY(28px);
+      transition: opacity .7s ease, transform .7s ease;
+    }
+    .fade-in.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ── Navigation ────────────────────────────────────────────── */
+    .nav {
+      position: sticky;
+      top: 0;
+      background: rgba(255,248,240,.92);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--clr-border);
+      z-index: 100;
+      padding: 16px 0;
+    }
+    .nav .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .nav-brand {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--clr-primary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .nav-brand .brand-icon {
+      font-size: 1.5rem;
+    }
+    .nav-brand .brand-glow {
+      color: var(--clr-accent);
+    }
+    .nav-cta {
+      background: var(--clr-primary);
+      color: #fff;
+      padding: 10px 22px;
+      border-radius: 50px;
+      font-weight: 600;
+      font-size: .9rem;
+      transition: background .2s, transform .15s;
+    }
+    .nav-cta:hover { background: var(--clr-primary-light); transform: translateY(-1px); }
+
+    /* ── Hero ──────────────────────────────────────────────────── */
+    .hero {
+      padding: 80px 0 60px;
+      text-align: center;
+      background: linear-gradient(175deg, #ede8ff 0%, var(--clr-bg) 60%);
+    }
+    .hero-emoji { font-size: 4rem; margin-bottom: 20px; display: block; }
+    .hero-logo {
+      display: block;
+      width: 200px;
+      height: auto;
+      margin: 0 auto 24px;
+      filter: drop-shadow(0 4px 20px rgba(246,166,35,.35));
+    }
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 800;
+      line-height: 1.2;
+      max-width: 720px;
+      margin: 0 auto 20px;
+      color: var(--clr-text);
+    }
+    .hero h1 em {
+      font-style: normal;
+      color: var(--clr-primary);
+    }
+    .hero p {
+      font-size: clamp(1.05rem, 2.5vw, 1.25rem);
+      color: var(--clr-text-light);
+      max-width: 580px;
+      margin: 0 auto 36px;
+    }
+    .hero-cta {
+      display: inline-block;
+      background: var(--clr-accent);
+      color: #fff;
+      padding: 16px 40px;
+      border-radius: 50px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      transition: background .2s, transform .15s, box-shadow .2s;
+      box-shadow: 0 4px 14px rgba(246,166,35,.35);
+    }
+    .hero-cta:hover {
+      background: var(--clr-accent-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(246,166,35,.45);
+    }
+    .hero-note {
+      margin-top: 14px;
+      font-size: .85rem;
+      color: var(--clr-text-light);
+    }
+
+    /* ── Section shared styles ─────────────────────────────────── */
+    section { padding: 80px 0; }
+    .section-label {
+      text-transform: uppercase;
+      font-size: .8rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--clr-primary);
+      margin-bottom: 8px;
+    }
+    .section-title {
+      font-size: clamp(1.6rem, 4vw, 2.4rem);
+      font-weight: 800;
+      margin-bottom: 16px;
+    }
+    .section-sub {
+      color: var(--clr-text-light);
+      font-size: 1.05rem;
+      max-width: 560px;
+    }
+    .section-header { text-align: center; margin-bottom: 56px; }
+    .section-header .section-sub { margin: 0 auto; }
+
+    /* ── Value Props ───────────────────────────────────────────── */
+    .value-props { background: var(--clr-bg-alt); }
+    .props-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 32px;
+    }
+    .prop-card {
+      background: var(--clr-bg);
+      border-radius: var(--radius);
+      padding: 36px 28px;
+      text-align: center;
+      border: 1px solid var(--clr-border);
+      transition: transform .25s, box-shadow .25s;
+    }
+    .prop-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-md);
+    }
+    .prop-icon { font-size: 2.5rem; margin-bottom: 16px; display: block; }
+    .prop-card h3 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .prop-card p {
+      color: var(--clr-text-light);
+      font-size: .95rem;
+    }
+
+    /* ── How It Works ──────────────────────────────────────────── */
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 40px;
+      counter-reset: step;
+    }
+    .step {
+      text-align: center;
+      position: relative;
+    }
+    .step-number {
+      width: 56px;
+      height: 56px;
+      background: var(--clr-primary);
+      color: #fff;
+      font-size: 1.5rem;
+      font-weight: 800;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    .step h3 { font-size: 1.15rem; font-weight: 700; margin-bottom: 10px; }
+    .step p { color: var(--clr-text-light); font-size: .95rem; max-width: 300px; margin: 0 auto; }
+    .step-arrow {
+      display: none;
+      position: absolute;
+      right: -28px;
+      top: 28px;
+      font-size: 1.6rem;
+      color: var(--clr-primary-light);
+    }
+    @media (min-width: 820px) {
+      .step-arrow { display: block; }
+    }
+
+    /* ── Social Proof ──────────────────────────────────────────── */
+    .social-proof { background: var(--clr-bg-alt); }
+    .testimonials {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 28px;
+    }
+    .testimonial {
+      background: var(--clr-bg);
+      border-radius: var(--radius);
+      padding: 32px 28px;
+      border: 1px solid var(--clr-border);
+      position: relative;
+    }
+    .testimonial::before {
+      content: '\201C';
+      font-size: 4rem;
+      color: var(--clr-primary-light);
+      opacity: .25;
+      position: absolute;
+      top: 8px;
+      left: 18px;
+      line-height: 1;
+    }
+    .testimonial p {
+      font-size: 1rem;
+      font-style: italic;
+      color: var(--clr-text);
+      margin-bottom: 18px;
+      position: relative;
+    }
+    .testimonial-author {
+      font-size: .9rem;
+      font-weight: 700;
+      color: var(--clr-primary);
+    }
+    .testimonial-role {
+      font-size: .8rem;
+      color: var(--clr-text-light);
+    }
+    .stars { color: var(--clr-accent); letter-spacing: 2px; margin-bottom: 12px; }
+
+    /* ── CTA / Signup ──────────────────────────────────────────── */
+    .cta-section {
+      background: linear-gradient(170deg, #ede8ff 0%, #fff4e8 100%);
+      text-align: center;
+    }
+    .cta-section .section-title { max-width: 600px; margin: 0 auto 12px; }
+    .cta-section .section-sub { margin: 0 auto 36px; }
+    .signup-form {
+      display: flex;
+      gap: 12px;
+      max-width: 480px;
+      margin: 0 auto;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .signup-form input[type="email"] {
+      flex: 1 1 260px;
+      padding: 14px 20px;
+      border: 2px solid var(--clr-border);
+      border-radius: 50px;
+      font-size: 1rem;
+      font-family: var(--font);
+      outline: none;
+      transition: border-color .2s;
+    }
+    .signup-form input[type="email"]:focus {
+      border-color: var(--clr-primary);
+    }
+    .signup-form button {
+      flex: 0 0 auto;
+      background: var(--clr-accent);
+      color: #fff;
+      border: none;
+      padding: 14px 32px;
+      border-radius: 50px;
+      font-size: 1rem;
+      font-weight: 700;
+      font-family: var(--font);
+      cursor: pointer;
+      transition: background .2s, transform .15s, box-shadow .2s;
+      box-shadow: 0 4px 14px rgba(246,166,35,.3);
+    }
+    .signup-form button:hover {
+      background: var(--clr-accent-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(246,166,35,.4);
+    }
+    .privacy-note {
+      margin-top: 14px;
+      font-size: .8rem;
+      color: var(--clr-text-light);
+    }
+
+    /* ── Footer ────────────────────────────────────────────────── */
+    .footer {
+      background: var(--clr-text);
+      color: rgba(255,255,255,.7);
+      padding: 40px 0;
+      text-align: center;
+      font-size: .9rem;
+    }
+    .footer-brand {
+      font-weight: 700;
+      color: #fff;
+      font-size: 1.1rem;
+      margin-bottom: 8px;
+    }
+    .footer a { color: rgba(255,255,255,.85); }
+    .footer a:hover { color: #fff; }
+    .footer-links {
+      margin-top: 16px;
+      display: flex;
+      gap: 24px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    /* ── Responsive tweaks ─────────────────────────────────────── */
+    @media (max-width: 600px) {
+      .hero { padding: 56px 0 40px; }
+      section { padding: 56px 0; }
+      .props-grid, .steps-grid, .testimonials { gap: 20px; }
+      .signup-form { flex-direction: column; align-items: stretch; }
+      .signup-form input[type="email"],
+      .signup-form button { flex: 1 1 auto; }
+    }
+  </style>
+</head>
+<body>
+
+  <noscript>
+    <div style="background:#1B2A4A;color:#fff;text-align:center;padding:16px;font-family:sans-serif;">
+      <strong>StoryGlow</strong> — Make storytime magical for kids ages 3–10.
+      To join our waitlist, email us at <a href="mailto:hello@readingcompanion.app" style="color:#F5A623;">hello@readingcompanion.app</a>.
+    </div>
+  </noscript>
+
+  <!-- ── Nav ──────────────────────────────────────────────────── -->
+  <nav class="nav" role="navigation" aria-label="Main navigation">
+    <div class="container">
+      <div class="nav-brand">
+        <span class="brand-icon">📖</span> Story<span class="brand-glow">Glow</span>
+      </div>
+      <a href="#waitlist" class="nav-cta">Join the Waitlist</a>
+    </div>
+  </nav>
+
+  <!-- ── Hero ─────────────────────────────────────────────────── -->
+  <header class="hero">
+    <div class="container">
+      <img src="storyglow-logo.png" alt="StoryGlow logo" class="hero-logo">
+      <h1>Turn Every Book Into a <em>Magical Adventure</em></h1>
+      <p>StoryGlow brings children's stories to life with warm, interactive voice narration — so bedtime (and anytime) feels like pure wonder. Designed for ages 3–10.</p>
+      <a href="#waitlist" class="hero-cta">Join the Free Waitlist</a>
+      <p class="hero-note">No credit card needed · Be the first to know when we launch</p>
+    </div>
+  </header>
+
+  <!-- ── Value Props ──────────────────────────────────────────── -->
+  <section class="value-props" id="features">
+    <div class="container">
+      <div class="section-header fade-in">
+        <p class="section-label">Why Families Love It</p>
+        <h2 class="section-title">Reading, Reimagined</h2>
+        <p class="section-sub">We built StoryGlow to spark curiosity, grow confidence, and make every page feel alive.</p>
+      </div>
+      <div class="props-grid">
+        <div class="prop-card fade-in">
+          <span class="prop-icon" role="img" aria-label="Microphone">🎙️</span>
+          <h3>Interactive Read-Aloud</h3>
+          <p>Engaging narration follows along with your child, highlighting words and bringing characters to life with expressive voices.</p>
+        </div>
+        <div class="prop-card fade-in">
+          <span class="prop-icon" role="img" aria-label="Chart">📊</span>
+          <h3>Progress Tracking</h3>
+          <p>See how many books your child has explored, which words they're learning, and celebrate milestones together.</p>
+        </div>
+        <div class="prop-card fade-in">
+          <span class="prop-icon" role="img" aria-label="Speaking head">🗣️</span>
+          <h3>Multiple Friendly Voices</h3>
+          <p>Choose from a cast of warm, diverse narrators — so your child always has a voice they love listening to.</p>
+        </div>
+        <div class="prop-card fade-in">
+          <span class="prop-icon" role="img" aria-label="Seedling">🌱</span>
+          <h3>Grows With Your Child</h3>
+          <p>Content and reading level adapt as your child's skills blossom — from first picture books to early chapter books.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── How It Works ─────────────────────────────────────────── -->
+  <section class="how-it-works" id="how">
+    <div class="container">
+      <div class="section-header fade-in">
+        <p class="section-label">Simple as 1-2-3</p>
+        <h2 class="section-title">How It Works</h2>
+        <p class="section-sub">Getting started takes less time than picking a bedtime story.</p>
+      </div>
+      <div class="steps-grid">
+        <div class="step fade-in">
+          <div class="step-number">1</div>
+          <span class="step-arrow" aria-hidden="true">→</span>
+          <h3>Pick a Story</h3>
+          <p>Browse our growing library of beloved children's books — classics and new favorites alike.</p>
+        </div>
+        <div class="step fade-in">
+          <div class="step-number">2</div>
+          <span class="step-arrow" aria-hidden="true">→</span>
+          <h3>Press Play</h3>
+          <p>A friendly narrator brings the story to life. Your child can listen, follow along, or read on their own.</p>
+        </div>
+        <div class="step fade-in">
+          <div class="step-number">3</div>
+          <h3>Watch Them Grow</h3>
+          <p>Track reading streaks, celebrate new words, and see your child fall in love with books — one story at a time.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Social Proof ─────────────────────────────────────────── -->
+  <section class="social-proof" id="stories">
+    <div class="container">
+      <div class="section-header fade-in">
+        <p class="section-label">From Our Beta Families</p>
+        <h2 class="section-title">Parents &amp; Kids Are Already Loving It</h2>
+        <p class="section-sub">Here's what early testers are saying about StoryGlow.</p>
+      </div>
+      <div class="testimonials">
+        <div class="testimonial fade-in">
+          <div class="stars" aria-label="5 out of 5 stars">★★★★★</div>
+          <p>My daughter used to resist reading time. Now she asks for "one more chapter" every single night. This is the best thing we've tried.</p>
+          <div class="testimonial-author">Sarah M.</div>
+          <div class="testimonial-role">Mom of a 6-year-old · Austin, TX</div>
+        </div>
+        <div class="testimonial fade-in">
+          <div class="stars" aria-label="5 out of 5 stars">★★★★★</div>
+          <p>I love that I can see exactly what my son is reading and how he's progressing. It's like having a reading tutor built into storytime.</p>
+          <div class="testimonial-author">James K.</div>
+          <div class="testimonial-role">Dad of an 8-year-old · Portland, OR</div>
+        </div>
+        <div class="testimonial fade-in">
+          <div class="stars" aria-label="5 out of 5 stars">★★★★★</div>
+          <p>The different character voices are incredible. My kids are totally hooked — and their vocabulary is growing faster than ever.</p>
+          <div class="testimonial-author">Priya R.</div>
+          <div class="testimonial-role">Mom of two (ages 5 &amp; 9) · Chicago, IL</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CTA / Waitlist ───────────────────────────────────────── -->
+  <section class="cta-section" id="waitlist">
+    <div class="container">
+      <div class="section-header fade-in">
+        <p class="section-label">Be the First</p>
+        <h2 class="section-title">Ready to Make Storytime Unforgettable?</h2>
+        <p class="section-sub">Join the waitlist and we'll let you know the moment StoryGlow is ready for your family.</p>
+      </div>
+      <form class="signup-form fade-in" action="https://formspree.io/f/placeholder" method="POST">
+        <label for="email" class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);">Email address</label>
+        <input type="email" id="email" name="email" placeholder="you@example.com" required aria-label="Your email address">
+        <button type="submit">Join the Waitlist 🎉</button>
+      </form>
+      <p class="privacy-note">We respect your privacy. No spam, ever — just one email when we launch.</p>
+    </div>
+  </section>
+
+  <!-- ── Footer ───────────────────────────────────────────────── -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-brand">
+        📖 Story<span style="color: var(--clr-accent);">Glow</span>
+      </div>
+      <p>&copy; 2025 StoryGlow. Made with ❤️ for families who love stories.</p>
+      <div class="footer-links">
+        <a href="mailto:hello@readingcompanion.app">Contact Us</a>
+        <a href="#features">Features</a>
+        <a href="#how">How It Works</a>
+        <a href="#waitlist">Join Waitlist</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ── Scroll fade-in script ────────────────────────────────── -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var targets = document.querySelectorAll('.fade-in');
+
+      if ('IntersectionObserver' in window) {
+        var observer = new IntersectionObserver(function (entries) {
+          entries.forEach(function (entry) {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('visible');
+              observer.unobserve(entry.target);
+            }
+          });
+        }, { threshold: 0.15 });
+
+        targets.forEach(function (el) { observer.observe(el); });
+      } else {
+        // Fallback: show everything immediately
+        targets.forEach(function (el) { el.classList.add('visible'); });
+      }
+    });
+  </script>
+
+</body>
+</html>
