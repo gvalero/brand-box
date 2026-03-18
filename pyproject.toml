@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "brand-box"
+version = "0.1.0"
+description = "CLI toolkit for generating complete brand identities from a concept description"
+requires-python = ">=3.10"
+dependencies = [
+    "google-genai>=1.0",
+    "openai>=1.0",
+    "Pillow>=10.0",
+    "python-dotenv>=1.0",
+    "moviepy>=2.0",
+    "azure-cognitiveservices-speech>=1.30",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+brand-box = "brand_box.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"

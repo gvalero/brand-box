@@ -1,0 +1,31 @@
+# brand-box output & caches
+output/
+*.mp4
+*.mp3
+.audio_cache/
+.image_cache/
+brand.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environment
+.env
+.venv/
+env/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
