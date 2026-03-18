@@ -106,7 +106,7 @@ def cmd_logo(args: argparse.Namespace) -> None:
     if not project:
         return
 
-    name = args.name or project.name or project.name_candidates[0] if project.name_candidates else None
+    name = args.name or project.name or (project.name_candidates[0] if project.name_candidates else None)
     if not name:
         _error("No brand name set. Run 'brand-box name' first or pass --name.")
         sys.exit(1)
