@@ -171,6 +171,14 @@ def cmd_website(args: argparse.Namespace) -> None:
     _print("Generating landing page…")
     path = gen.generate(project=project, output_dir=str(dirs["website"]))
     project.website_path = path
+    if gen.last_specs:
+        existing_ids = {spec.id for spec in gen.last_specs}
+        project.website_specs = [spec for spec in project.website_specs if spec.id not in existing_ids]
+        project.website_specs.extend(gen.last_specs)
+    if gen.last_spec:
+        project.selected_website_spec = gen.last_spec.id
+        _print(f"  Selected direction: {gen.last_spec.visual_direction}")
+        _print(f"  Website score: {gen.last_spec.review.score:.2f}")
     project.save(Path.cwd() / "brand.json")
     _success(f"Landing page saved to {path}")
 
@@ -227,6 +235,10 @@ def cmd_video(args: argparse.Namespace) -> None:
     name = project.name or (project.name_candidates[0] if project.name_candidates else "Brand")
     dirs = project.ensure_output_dirs()
     fmt_id = args.format or "teaser"
+    music_arg = args.music
+    music_dir = args.music_dir
+
+    from brand_box.generators.script import ScriptGenerator, BUILTIN_FORMATS
 
     identity_ctx = ""
     if project.identity and project.identity.tone:
@@ -236,7 +248,57 @@ def cmd_video(args: argparse.Namespace) -> None:
             f"Tagline: {project.identity.tagline}."
         )
 
-    output_path = str(dirs["videos"] / f"video_{fmt_id}.mp4")
+    profile = args.profile or "reel"
+    suffix = "" if profile == "reel" else f"_{profile}"
+    output_path = str(dirs["videos"] / f"video_{fmt_id}{suffix}.mp4")
+
+    if fmt_id not in BUILTIN_FORMATS:
+        _error(f"Unknown format: {fmt_id}. Available: {list(BUILTIN_FORMATS.keys())}")
+        sys.exit(1)
+
+    _print(f"Generating storyboard options ({fmt_id} format)…")
+    script_gen = ScriptGenerator()
+    storyboard_variants = script_gen.generate_storyboard_variants(
+        brand_name=name,
+        concept=project.concept,
+        format_id=fmt_id,
+        identity_context=identity_ctx,
+        count=3,
+    )
+    if not storyboard_variants:
+        _error("No storyboard variants were generated. Check your model configuration or try again.")
+        sys.exit(1)
+    if storyboard_variants:
+        existing_ids = {sb.id for sb in storyboard_variants}
+        project.storyboards = [sb for sb in project.storyboards if sb.id not in existing_ids]
+        project.storyboards.extend(storyboard_variants)
+    storyboard = script_gen.select_best_storyboard(storyboard_variants)
+    script = script_gen.storyboard_to_script(storyboard, format_id=fmt_id)
+    _print(f"  Selected hook angle: {storyboard.angle}")
+    _print(f"  Storyboard score: {storyboard.review.score:.2f}")
+    _print(f"  Scenes: {len(storyboard.scenes)}")
+
+    from brand_box.generators.music import MusicPlanner
+    music_planner = MusicPlanner()
+    music_plan = music_planner.plan(
+        brand_name=name,
+        concept=project.concept,
+        format_id=fmt_id,
+        storyboard={
+            "hook": storyboard.hook,
+            "scenes": storyboard.scenes,
+        },
+        music_path=music_arg,
+        music_dir=music_dir,
+        profile=profile,
+    )
+    if music_plan.track_path:
+        _print(f"  Music: {Path(music_plan.track_path).name}")
+    else:
+        _print(f"  Music plan: {music_plan.mood} / {music_plan.tempo}")
+    project.music_plans = [mp for mp in project.music_plans if mp.id != music_plan.id]
+    project.music_plans.append(music_plan)
+    project.selected_music_plan = music_plan.id
 
     # --- Try Manus first (superior quality) ---
     if not args.local:
@@ -254,6 +316,13 @@ def cmd_video(args: argparse.Namespace) -> None:
                     identity_context=identity_ctx,
                     output_path=output_path,
                     logo_path=logo_path,
+                    storyboard={
+                        "hook": storyboard.hook,
+                        "scenes": storyboard.scenes,
+                        "voiceover": storyboard.voiceover,
+                        "caption_plan": storyboard.caption_plan,
+                    },
+                    profile=profile,
                 )
                 project.video_paths.append(result_path)
                 project.save(Path.cwd() / "brand.json")
@@ -263,24 +332,8 @@ def cmd_video(args: argparse.Namespace) -> None:
             _print(f"  Manus failed: {e} — falling back to local pipeline")
 
     # --- Local pipeline fallback ---
-    from brand_box.generators.script import ScriptGenerator, BUILTIN_FORMATS
     from brand_box.generators.video import VideoAssembler
-
-    if fmt_id not in BUILTIN_FORMATS:
-        _error(f"Unknown format: {fmt_id}. Available: {list(BUILTIN_FORMATS.keys())}")
-        sys.exit(1)
-
-    # Step 1: Script
-    _print(f"Generating script ({fmt_id} format)…")
-    script_gen = ScriptGenerator()
-    script = script_gen.generate_script(
-        brand_name=name,
-        concept=project.concept,
-        format_id=fmt_id,
-        identity_context=identity_ctx,
-    )
     _print(f"  Title: {script.get('title', 'N/A')}")
-    _print(f"  Segments: {len(script.get('segments', []))}")
 
     # Step 2: Images (unless --no-images)
     image_paths = {}
@@ -293,26 +346,49 @@ def cmd_video(args: argparse.Namespace) -> None:
 
         for seg in script.get("segments", []):
             idx = seg["index"]
-            desc = seg.get("visual_description", "Abstract brand visual")
-            prompt = (
-                f"Social media video illustration, NO TEXT, NO WORDS, NO LETTERS in the image. "
-                f"Brand: {name}. Style: warm, colorful, professional. "
-                f"Scene: {desc}"
+            descriptions = [seg.get("visual_description", "Abstract brand visual")]
+            descriptions.extend(
+                beat for beat in seg.get("visual_beats", [])
+                if isinstance(beat, str) and beat.strip()
             )
-            img_path = str(img_dir / f"img_{idx}.png")
-            try:
-                generate_image(prompt, img_path)
-                image_paths[idx] = img_path
-                _print(f"  Image {idx + 1} ✓")
-            except Exception as e:
-                _print(f"  Image {idx + 1} failed: {e}")
+            asset_paths: list[str] = []
+            for asset_i, desc in enumerate(descriptions):
+                prompt = (
+                    f"Social media video illustration, NO TEXT, NO WORDS, NO LETTERS in the image. "
+                    f"Brand: {name}. Style: warm, colorful, professional. "
+                    f"Scene: {desc}"
+                )
+                suffix = "" if asset_i == 0 else f"_beat_{asset_i}"
+                img_path = str(img_dir / f"img_{idx}{suffix}.png")
+                try:
+                    generate_image(prompt, img_path)
+                    asset_paths.append(img_path)
+                    if asset_i == 0:
+                        _print(f"  Image {idx + 1} ✓")
+                    else:
+                        _print(f"  Cutaway {idx + 1}.{asset_i} ✓")
+                except Exception as e:
+                    label = f"Image {idx + 1}" if asset_i == 0 else f"Cutaway {idx + 1}.{asset_i}"
+                    _print(f"  {label} failed: {e}")
+            if asset_paths:
+                image_paths[idx] = asset_paths[0] if len(asset_paths) == 1 else asset_paths
     else:
         # --no-images: reuse existing images from previous runs
         for seg in script.get("segments", []):
             idx = seg["index"]
-            img_path = img_dir / f"img_{idx}.png"
-            if img_path.is_file():
-                image_paths[idx] = str(img_path)
+            cached_assets = []
+            primary_path = img_dir / f"img_{idx}.png"
+            if primary_path.is_file():
+                cached_assets.append(str(primary_path))
+            beat_index = 1
+            while True:
+                beat_path = img_dir / f"img_{idx}_beat_{beat_index}.png"
+                if not beat_path.is_file():
+                    break
+                cached_assets.append(str(beat_path))
+                beat_index += 1
+            if cached_assets:
+                image_paths[idx] = cached_assets[0] if len(cached_assets) == 1 else cached_assets
         if image_paths:
             _print(f"Reusing {len(image_paths)} cached images")
 
@@ -352,7 +428,7 @@ def cmd_video(args: argparse.Namespace) -> None:
             "text_dark": project.identity.text_color or "#333333",
         }
 
-    assembler = VideoAssembler(brand_colors=colors if colors else None)
+    assembler = VideoAssembler(brand_colors=colors if colors else None, profile=profile)
     tagline = project.identity.tagline if project.identity else ""
 
     try:
@@ -363,6 +439,13 @@ def cmd_video(args: argparse.Namespace) -> None:
             output_path=output_path,
             brand_name=name,
             tagline=tagline,
+            storyboard={
+                "hook": storyboard.hook,
+                "scenes": storyboard.scenes,
+                "voiceover": storyboard.voiceover,
+                "caption_plan": storyboard.caption_plan,
+            },
+            background_music_path=music_plan.track_path,
         )
         project.video_paths.append(result_path)
         project.save(Path.cwd() / "brand.json")
@@ -428,6 +511,9 @@ def build_parser() -> argparse.ArgumentParser:
     # video
     p_video = sub.add_parser("video", help="Generate social media video content")
     p_video.add_argument("--format", choices=["teaser", "explainer", "testimonial", "fact", "founder"], help="Content format")
+    p_video.add_argument("--profile", choices=["reel", "square", "web-hero", "youtube"], default="reel", help="Output profile / aspect ratio")
+    p_video.add_argument("--music", help="Optional background music track path")
+    p_video.add_argument("--music-dir", help="Optional folder to auto-pick a background music track from")
     p_video.add_argument("--local", action="store_true", help="Force local pipeline (skip Manus)")
     p_video.add_argument("--no-images", action="store_true", help="Skip AI image generation (local pipeline only)")
     p_video.add_argument("--no-audio", action="store_true", help="Skip audio generation (local pipeline only)")

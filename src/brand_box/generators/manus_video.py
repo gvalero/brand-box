@@ -18,6 +18,8 @@ from typing import Optional
 from urllib.request import Request, urlopen, urlretrieve
 from urllib.error import HTTPError, URLError
 
+from brand_box.generators.video import RENDER_PROFILES
+
 logger = logging.getLogger(__name__)
 
 MANUS_AGENT_PROFILE = "manus-1.6-max"
@@ -43,12 +45,14 @@ class ManusVideoGenerator:
         identity_context: str = "",
         output_path: str | None = None,
         logo_path: str | None = None,
+        storyboard: dict | None = None,
+        profile: str = "reel",
     ) -> str:
         """Submit a video task to Manus and download the result.
 
         Returns: path to the downloaded MP4 file.
         """
-        prompt = self._build_prompt(brand_name, concept, format_id, identity_context)
+        prompt = self._build_prompt(brand_name, concept, format_id, identity_context, storyboard, profile)
 
         logger.info("Submitting video task to Manus…")
         task = self._create_task(prompt, logo_path)
@@ -81,6 +85,8 @@ class ManusVideoGenerator:
         concept: str,
         format_id: str,
         identity_context: str,
+        storyboard: dict | None = None,
+        profile: str = "reel",
     ) -> str:
         format_descriptions = {
             "teaser": "a 15-25 second teaser/promo video for social media (TikTok/Instagram Reels). Fast-paced, exciting, with dynamic transitions and background music.",
@@ -91,14 +97,29 @@ class ManusVideoGenerator:
         }
         format_desc = format_descriptions.get(format_id, format_descriptions["teaser"])
 
+        profile_cfg = RENDER_PROFILES.get(profile, RENDER_PROFILES["reel"])
+        aspect_instruction = f"{profile_cfg['width']}x{profile_cfg['height']} ({profile_cfg['label']})"
+        storyboard_part = ""
+        if storyboard:
+            scenes = storyboard.get("scenes", [])
+            scene_lines = []
+            for scene in scenes:
+                scene_lines.append(
+                    f"- Scene {scene.get('index', '?') + 1}: purpose={scene.get('purpose', '')}; "
+                    f"shot={scene.get('shot_type', '')}; visual={scene.get('visual_description', '')}; "
+                    f"text={scene.get('on_screen_text', '')}; voiceover={scene.get('voiceover', '')}"
+                )
+            storyboard_part = "\nStoryboard guidance:\n" + "\n".join(scene_lines)
+
         return f"""Create {format_desc}
 
 Brand: {brand_name}
 Product: {concept}
 {f"Brand identity: {identity_context}" if identity_context else ""}
+{storyboard_part}
 
 Requirements:
-- Vertical format (9:16) optimized for TikTok/Instagram Reels
+- Render profile: {aspect_instruction}
 - Professional quality with smooth transitions
 - Include background music that matches the brand tone
 - Use high-quality visuals (animated/illustrated, not stock photos)

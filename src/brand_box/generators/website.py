@@ -1,9 +1,14 @@
 """
 Landing page generator.
 
-Creates a responsive, single-page HTML landing page from brand identity.
-Uses an LLM to generate copy, then fills a template with brand colors,
-fonts, and content.
+This module now separates website generation into three steps:
+
+1. strategy/spec generation
+2. copy generation
+3. HTML rendering
+
+The renderer still outputs a single-file landing page so the current CLI
+experience remains intact while the architecture becomes more structured.
 """
 
 from __future__ import annotations
@@ -11,12 +16,101 @@ from __future__ import annotations
 import json
 import logging
 import re
+import uuid
 from pathlib import Path
-from typing import Optional
 
-from brand_box.project import BrandProject, BrandIdentity
+from brand_box.evaluators.creative import WebsiteEvaluator
+from brand_box.models.artifacts import WebsiteSpec
+from brand_box.project import BrandIdentity, BrandProject
 
 logger = logging.getLogger(__name__)
+
+
+class WebsiteStrategist:
+    """Create a structured WebsiteSpec from the project state."""
+
+    def build_spec(self, project: BrandProject) -> WebsiteSpec:
+        return self.build_spec_variant(project, variant="default")
+
+    def build_spec_variant(self, project: BrandProject, variant: str = "default") -> WebsiteSpec:
+        """Create a first-pass website spec for later rendering."""
+        identity = project.identity or BrandIdentity()
+        brief = project.brief
+        name = project.active_name or project.name or "Brand"
+
+        if brief.audience:
+            audience = ", ".join(brief.audience)
+        elif any(word in project.concept.lower() for word in ("parent", "child", "family", "kids")):
+            audience = "Parents and families"
+        else:
+            audience = "Prospective customers and early adopters"
+
+        conversion_goal = "Join the waitlist"
+        if any(word in project.concept.lower() for word in ("app", "tool", "skill", "assistant")):
+            conversion_goal = "Try the product or join the waitlist"
+
+        sections = [
+            {"id": "hero", "kind": "hero", "purpose": "Communicate the value proposition quickly"},
+            {"id": "features", "kind": "feature_grid", "purpose": "Show the strongest product benefits"},
+            {"id": "how_it_works", "kind": "process_steps", "purpose": "Reduce friction with a clear flow"},
+            {"id": "proof", "kind": "social_proof", "purpose": "Build trust and emotional confidence"},
+            {"id": "cta", "kind": "cta", "purpose": "Drive the primary conversion action"},
+        ]
+
+        design_tokens = {
+            "colors": {
+                "primary": identity.primary_color or "#5b4fc7",
+                "secondary": identity.secondary_color or "#7e74d2",
+                "accent": identity.accent_color or "#f6a623",
+                "background": identity.background_color or "#faf7f2",
+                "text": identity.text_color or "#3a3153",
+            },
+            "fonts": {
+                "heading": identity.font_heading or "Segoe UI",
+                "body": identity.font_body or "system-ui",
+            },
+            "tone": identity.tone or "professional, warm, trustworthy",
+            "tagline": identity.tagline or "",
+        }
+
+        asset_refs = {
+            "logo_path": project.active_logo_path,
+            "logo_paths": list(project.logo_paths),
+            "selected_logo": project.selected_logo,
+        }
+
+        spec = WebsiteSpec(
+            id=f"website-{uuid.uuid4().hex[:8]}",
+            audience=audience,
+            conversion_goal=conversion_goal,
+            visual_direction=self._derive_visual_direction(project, variant=variant),
+            sections=sections,
+            design_tokens=design_tokens,
+            asset_refs=asset_refs,
+        )
+        spec.asset_refs["variant"] = variant
+        return spec
+
+    @staticmethod
+    def _derive_visual_direction(project: BrandProject, variant: str = "default") -> str:
+        """Infer a basic visual direction from the concept and identity."""
+        identity = project.identity or BrandIdentity()
+        name = project.active_name or project.name or "Brand"
+        concept = project.concept.lower()
+        tone = (identity.tone or "").lower()
+
+        if variant == "editorial":
+            return f"{name}: editorial, typography-led, premium landing page"
+        if variant == "playful":
+            return f"{name}: colorful, energetic, character-driven landing page"
+        if variant == "trust":
+            return f"{name}: calm, high-trust, product clarity landing page"
+
+        if any(word in concept for word in ("story", "book", "child", "children", "kids", "family")):
+            return f"{name}: warm, magical, story-led landing page"
+        if any(word in tone for word in ("playful", "warm", "approachable")):
+            return f"{name}: colorful, characterful, personality-driven landing page"
+        return f"{name}: clean, clear, high-trust product landing page"
 
 
 class WebsiteGenerator:
@@ -25,17 +119,24 @@ class WebsiteGenerator:
     def __init__(self) -> None:
         self._openai_client = None
         self._gemini_client = None
+        self._strategist = WebsiteStrategist()
+        self._evaluator = WebsiteEvaluator()
+        self.last_spec: WebsiteSpec | None = None
+        self.last_specs: list[WebsiteSpec] = []
         self._init_clients()
 
     def _init_clients(self) -> None:
         from brand_box.config import (
-            AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_KEY,
-            AZURE_OPENAI_DEPLOYMENT_GPT, GEMINI_API_KEY,
+            AZURE_OPENAI_DEPLOYMENT_GPT,
+            AZURE_OPENAI_ENDPOINT,
+            AZURE_OPENAI_KEY,
+            GEMINI_API_KEY,
         )
 
         if AZURE_OPENAI_KEY and AZURE_OPENAI_ENDPOINT:
             try:
                 from openai import AzureOpenAI
+
                 self._openai_client = AzureOpenAI(
                     api_key=AZURE_OPENAI_KEY,
                     azure_endpoint=AZURE_OPENAI_ENDPOINT,
@@ -49,6 +150,7 @@ class WebsiteGenerator:
         if GEMINI_API_KEY:
             try:
                 from google import genai
+
                 self._gemini_client = genai.Client(api_key=GEMINI_API_KEY)
                 return
             except Exception as e:
@@ -56,8 +158,11 @@ class WebsiteGenerator:
 
     def generate(self, project: BrandProject, output_dir: str) -> str:
         """Generate a landing page and return the path to index.html."""
-        copy = self._generate_copy(project)
-        html = self._render_html(project, copy)
+        specs = self.generate_variants(project, count=3)
+        spec = self.select_best_spec(specs)
+        html = self._render_html(project, spec)
+        self.last_spec = spec
+        self.last_specs = specs
 
         out = Path(output_dir)
         out.mkdir(parents=True, exist_ok=True)
@@ -67,11 +172,35 @@ class WebsiteGenerator:
         logger.info("Landing page saved to %s", index_path)
         return str(index_path)
 
-    def _generate_copy(self, project: BrandProject) -> dict:
-        """Use LLM to generate page copy."""
-        name = project.name or "Our Product"
+    def _generate_spec(self, project: BrandProject) -> WebsiteSpec:
+        """Build a typed website spec for the current project."""
+        return self._strategist.build_spec(project)
+
+    def generate_variants(self, project: BrandProject, count: int = 3) -> list[WebsiteSpec]:
+        """Generate multiple website variants and score them."""
+        variants = ["default", "editorial", "trust", "playful"][: max(1, count)]
+        specs: list[WebsiteSpec] = []
+        for variant in variants:
+            spec = self._strategist.build_spec_variant(project, variant=variant)
+            spec.copy = self._generate_copy(project, spec)
+            spec.review = self._evaluator.evaluate(spec)
+            spec.scores = dict(spec.review.subscores)
+            specs.append(spec)
+        return specs
+
+    @staticmethod
+    def select_best_spec(specs: list[WebsiteSpec]) -> WebsiteSpec:
+        """Pick the highest-scoring website spec."""
+        if not specs:
+            raise ValueError("No website specs available")
+        return max(specs, key=lambda spec: (spec.review.score, spec.visual_direction))
+
+    def _generate_copy(self, project: BrandProject, spec: WebsiteSpec) -> dict:
+        """Use the LLM to generate copy for a specific website spec."""
+        name = project.active_name or project.name or "Our Product"
         identity = project.identity
         tagline = identity.tagline if identity else ""
+        sections = ", ".join(section.get("kind", "section") for section in spec.sections)
 
         prompt = f"""You are a conversion-focused copywriter. Generate landing page copy for:
 
@@ -79,6 +208,10 @@ Brand: {name}
 Product: {project.concept}
 Tagline: {tagline}
 Tone: {identity.tone if identity else 'professional, warm, trustworthy'}
+Target audience: {spec.audience}
+Conversion goal: {spec.conversion_goal}
+Visual direction: {spec.visual_direction}
+Planned sections: {sections}
 
 Return a JSON object with:
 {{
@@ -176,20 +309,23 @@ Return ONLY valid JSON."""
             "cta_button_text": "Join the Waitlist 🎉",
         }
 
-    def _render_html(self, project: BrandProject, copy: dict) -> str:
-        """Render the full HTML page."""
-        name = project.name or "Brand"
+    def _render_html(self, project: BrandProject, spec: WebsiteSpec) -> str:
+        """Render the full HTML page from a typed website spec."""
+        name = project.active_name or project.name or "Brand"
         identity = project.identity or BrandIdentity()
+        copy = spec.copy or self._default_copy(name, identity.tagline or "")
 
-        primary = identity.primary_color or "#5b4fc7"
-        secondary = identity.secondary_color or "#7e74d2"
-        accent = identity.accent_color or "#f6a623"
-        bg = identity.background_color or "#faf7f2"
-        text_color = identity.text_color or "#3a3153"
-        font_heading = identity.font_heading or "Segoe UI"
-        font_body = identity.font_body or "system-ui"
+        colors = spec.design_tokens.get("colors", {})
+        fonts = spec.design_tokens.get("fonts", {})
 
-        # Derive lighter primary
+        primary = colors.get("primary") or identity.primary_color or "#5b4fc7"
+        secondary = colors.get("secondary") or identity.secondary_color or "#7e74d2"
+        accent = colors.get("accent") or identity.accent_color or "#f6a623"
+        bg = colors.get("background") or identity.background_color or "#faf7f2"
+        text_color = colors.get("text") or identity.text_color or "#3a3153"
+        font_heading = fonts.get("heading") or identity.font_heading or "Segoe UI"
+        font_body = fonts.get("body") or identity.font_body or "system-ui"
+
         def lighten(hex_color: str, factor: float = 0.2) -> str:
             h = hex_color.lstrip("#")
             r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
@@ -204,32 +340,32 @@ Return ONLY valid JSON."""
         border_color = lighten(primary, 0.7)
 
         features_html = ""
-        for f in copy.get("features", []):
+        for feature in copy.get("features", []):
             features_html += f"""
             <div class="prop-card fade-in">
-                <span class="prop-icon">{f['icon']}</span>
-                <h3>{f['title']}</h3>
-                <p>{f['description']}</p>
+                <span class="prop-icon">{feature['icon']}</span>
+                <h3>{feature['title']}</h3>
+                <p>{feature['description']}</p>
             </div>"""
 
         steps_html = ""
         steps = copy.get("how_it_works", [])
-        for i, s in enumerate(steps):
+        for i, step in enumerate(steps):
             arrow = '<span class="step-arrow" aria-hidden="true">→</span>' if i < len(steps) - 1 else ""
             steps_html += f"""
             <div class="step-card fade-in">
-                <span class="step-num">{s['step']}</span>
-                <h3>{s['title']}</h3>
-                <p>{s['description']}</p>
+                <span class="step-num">{step['step']}</span>
+                <h3>{step['title']}</h3>
+                <p>{step['description']}</p>
             </div>{arrow}"""
 
         testimonials_html = ""
-        for t in copy.get("testimonials", []):
+        for testimonial in copy.get("testimonials", []):
             testimonials_html += f"""
             <div class="testimonial-card fade-in">
                 <div class="stars">⭐⭐⭐⭐⭐</div>
-                <p class="quote">"{t['quote']}"</p>
-                <p class="author">— {t['author']}</p>
+                <p class="quote">"{testimonial['quote']}"</p>
+                <p class="author">— {testimonial['author']}</p>
             </div>"""
 
         return f"""<!DOCTYPE html>
@@ -242,6 +378,7 @@ Return ONLY valid JSON."""
 :root {{
     --clr-primary: {primary};
     --clr-primary-light: {primary_light};
+    --clr-secondary: {secondary};
     --clr-accent: {accent};
     --clr-accent-hover: {accent_hover};
     --clr-bg: {bg};
@@ -262,7 +399,6 @@ html {{ scroll-behavior: smooth; }}
 body {{ font-family: var(--font-body); color: var(--clr-text); background: var(--clr-bg); line-height: 1.6; }}
 h1, h2, h3 {{ font-family: var(--font-heading); }}
 
-/* Nav */
 .nav {{
     position: sticky; top: 0; z-index: 100;
     background: rgba(255,255,255,.92); backdrop-filter: blur(10px);
@@ -280,10 +416,22 @@ h1, h2, h3 {{ font-family: var(--font-heading); }}
 }}
 .nav-cta:hover {{ background: var(--clr-accent-hover); }}
 
-/* Hero */
 .hero {{
     text-align: center; padding: 100px 24px 80px;
-    background: linear-gradient(175deg, {lighten(primary, 0.85)} 0%, var(--clr-bg) 60%);
+    background:
+        radial-gradient(circle at top left, {lighten(accent, 0.75)} 0%, transparent 28%),
+        linear-gradient(175deg, {lighten(primary, 0.85)} 0%, var(--clr-bg) 60%);
+}}
+.hero-kicker {{
+    display: inline-block;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.8);
+    border: 1px solid var(--clr-border);
+    color: var(--clr-primary);
+    font-size: .85rem;
+    font-weight: 700;
+    margin-bottom: 18px;
 }}
 .hero h1 {{ font-size: 2.8rem; margin-bottom: 16px; color: var(--clr-primary); }}
 .hero p {{ font-size: 1.2rem; color: var(--clr-text-light); max-width: 600px; margin: 0 auto 32px; }}
@@ -294,11 +442,9 @@ h1, h2, h3 {{ font-family: var(--font-heading); }}
 }}
 .hero-cta:hover {{ background: var(--clr-accent-hover); transform: translateY(-2px); }}
 
-/* Sections */
 section {{ padding: 80px 24px; max-width: var(--max-w); margin: 0 auto; }}
 .section-title {{ text-align: center; font-size: 2rem; margin-bottom: 48px; color: var(--clr-primary); }}
 
-/* Features */
 .props-grid {{
     display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 32px;
 }}
@@ -312,7 +458,6 @@ section {{ padding: 80px 24px; max-width: var(--max-w); margin: 0 auto; }}
 .prop-card h3 {{ margin-bottom: 8px; color: var(--clr-primary); }}
 .prop-card p {{ color: var(--clr-text-light); font-size: .95rem; }}
 
-/* How it works */
 .steps {{
     display: flex; align-items: flex-start; justify-content: center;
     gap: 16px; flex-wrap: wrap;
@@ -330,7 +475,6 @@ section {{ padding: 80px 24px; max-width: var(--max-w); margin: 0 auto; }}
 }}
 .step-arrow {{ font-size: 2rem; color: var(--clr-primary); align-self: center; margin-top: 30px; }}
 
-/* Testimonials */
 .testimonials-grid {{
     display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 32px;
 }}
@@ -342,7 +486,6 @@ section {{ padding: 80px 24px; max-width: var(--max-w); margin: 0 auto; }}
 .quote {{ font-style: italic; color: var(--clr-text); margin-bottom: 12px; }}
 .author {{ color: var(--clr-text-light); font-size: .9rem; }}
 
-/* CTA section */
 .cta-section {{
     text-align: center; padding: 80px 24px;
     background: linear-gradient(175deg, var(--clr-bg) 0%, {lighten(primary, 0.85)} 100%);
@@ -367,21 +510,18 @@ section {{ padding: 80px 24px; max-width: var(--max-w); margin: 0 auto; }}
 }}
 .signup-form button:hover {{ background: var(--clr-accent-hover); }}
 
-/* Footer */
 footer {{
     text-align: center; padding: 32px 24px;
     color: var(--clr-text-light); font-size: .85rem;
     border-top: 1px solid var(--clr-border);
 }}
 
-/* Animations */
 .fade-in {{
     opacity: 0; transform: translateY(28px);
     transition: opacity .7s ease, transform .7s ease;
 }}
 .fade-in.visible {{ opacity: 1; transform: translateY(0); }}
 
-/* Responsive */
 @media (max-width: 600px) {{
     .hero h1 {{ font-size: 2rem; }}
     .signup-form {{ flex-direction: column; }}
@@ -398,6 +538,7 @@ footer {{
 </nav>
 
 <section class="hero">
+    <div class="hero-kicker fade-in">{spec.visual_direction}</div>
     <h1 class="fade-in">{copy.get('hero_headline', f'Welcome to {name}')}</h1>
     <p class="fade-in">{copy.get('hero_subheadline', '')}</p>
     <a href="#signup" class="hero-cta fade-in">{copy.get('cta_button_text', 'Get Started')}</a>
