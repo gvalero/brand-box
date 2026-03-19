@@ -2,14 +2,16 @@
 CLI entry point for brand-box.
 
 Usage (recommended order):
-    brand-box init <concept>      — start a new brand project
-    brand-box name [--count N]    — generate name candidates
-    brand-box identity            — generate colors, fonts, tone
-    brand-box logo [--name NAME]  — generate logo options
-    brand-box kit                 — generate brand guidelines (after locking name + logo)
-    brand-box website             — generate a landing page
-    brand-box social              — generate social media assets
-    brand-box video [--format]    — generate social media video
+    brand-box init <concept>          — start a new brand project
+    brand-box name [--count N]        — generate name candidates (STOPS here)
+    brand-box select name "MyBrand"   — lock name choice  ← decision gate
+    brand-box logo [--count N]        — generate logo options (STOPS here)
+    brand-box select logo 2           — lock logo choice  ← decision gate
+    brand-box identity                — generate colors, fonts, tone
+    brand-box kit                     — generate brand guidelines
+    brand-box website [--variants]    — generate a landing page
+    brand-box social                  — generate social media assets
+    brand-box video [--format]        — generate social media video
 """
 
 from __future__ import annotations
@@ -51,6 +53,54 @@ def _success(msg: str) -> None:
         console.print(f"[green]✓[/green] {msg}")
     else:
         print(f"OK: {msg}")
+
+
+def _require_gate(
+    project: BrandProject,
+    *,
+    need_name: bool = False,
+    need_logo: bool = False,
+    json_mode: bool = False,
+) -> None:
+    """Enforce decision gates — exit if required selections haven't been made.
+
+    When *json_mode* is True the error is emitted as a parseable JSON object
+    so that an orchestrating agent can react programmatically.
+    """
+    missing: list[str] = []
+    if need_name and not project.selected_name:
+        missing.append("name")
+    if need_logo and not project.selected_logo:
+        missing.append("logo")
+    if not missing:
+        return
+
+    if json_mode:
+        import json as _json
+        print(_json.dumps({
+            "status": "gate_failed",
+            "missing_selections": missing,
+            "help": {s: f"brand-box select {s} <value>" for s in missing},
+        }, indent=2))
+    else:
+        for stage in missing:
+            if stage == "name":
+                _error("No name selected. Run 'brand-box select name <name>' to lock your choice.")
+                if project.name_candidates:
+                    _print("  Available:")
+                    for n in project.name_candidates:
+                        _print(f"    • {n}")
+                else:
+                    _print("  Run 'brand-box name' first to generate candidates.")
+            elif stage == "logo":
+                _error("No logo selected. Run 'brand-box select logo <index>' to lock your choice.")
+                if project.logo_paths:
+                    _print("  Available:")
+                    for i, p in enumerate(project.logo_paths, 1):
+                        _print(f"    {i}. {p}")
+                else:
+                    _print("  Run 'brand-box logo' first to generate options.")
+    sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
@@ -159,48 +209,85 @@ def cmd_init(args: argparse.Namespace) -> None:
     _print(f"  Output:  {project_dir / 'output'}")
     _print("")
     _print("Next steps:")
-    _print("  brand-box name     — generate name candidates")
-    _print("  brand-box identity — generate brand identity")
-    _print("  brand-box logo     — generate logo options")
-    _print("  brand-box kit      — generate brand guidelines")
+    _print("  brand-box name                  — generate name candidates")
+    _print("  brand-box select name \"X\"       — lock your name choice")
+    _print("  brand-box logo                  — generate logo options")
+    _print("  brand-box select logo N         — lock your logo choice")
+    _print("  brand-box identity              — generate brand identity")
+    _print("  brand-box kit                   — generate brand guidelines")
 
 
 def cmd_name(args: argparse.Namespace) -> None:
-    """Generate brand name candidates."""
+    """Generate brand name candidates.
+
+    This is a **decision gate** — it produces candidates and stops.
+    The caller (human or agent) must run ``brand-box select name <name>``
+    before downstream commands will proceed.
+    """
     project = _load_project()
     if not project:
         return
 
     from brand_box.generators.name import NameGenerator
-    from brand_box.models.artifacts import NameCandidate
     gen = NameGenerator()
     count = args.count or 10
 
     _print(f"Generating {count} name candidates for: {project.concept}")
     candidates = gen.generate_rich(project.concept, count=count)
     names = [c.name for c in candidates]
-    project.name_candidates = names  # legacy string list
-    project.naming_candidates = candidates  # rich typed list
-
-    for c in candidates:
-        line = f"  • {c.name}"
-        if c.rationale:
-            line += f" — {c.rationale}"
-        _print(line)
+    project.name_candidates = names
+    project.naming_candidates = candidates
 
     project.save(Path.cwd() / "brand.json")
-    _success(f"{len(names)} name candidates saved to brand.json")
+
+    if args.json:
+        import json
+        from dataclasses import asdict
+        print(json.dumps({
+            "status": "awaiting_selection",
+            "stage": "name",
+            "candidates": [asdict(c) for c in candidates],
+            "next_step": "brand-box select name <name>",
+        }, indent=2))
+    else:
+        for c in candidates:
+            line = f"  • {c.name}"
+            if c.rationale:
+                line += f" — {c.rationale}"
+            _print(line)
+        _print("")
+        _success(f"{len(names)} candidates saved. Select one to continue:")
+        _print("  brand-box select name \"<name>\"")
 
 
 def cmd_logo(args: argparse.Namespace) -> None:
-    """Generate logo options."""
+    """Generate logo options.
+
+    This is a **decision gate** — it produces options and stops.
+    The caller must run ``brand-box select logo <index>`` before
+    downstream commands will proceed.
+    """
     project = _load_project()
     if not project:
         return
 
-    name = args.name or project.name or (project.name_candidates[0] if project.name_candidates else None)
+    # --name flag bypasses the name-selection gate
+    name = args.name or project.selected_name
     if not name:
-        _error("No brand name set. Run 'brand-box name' first or pass --name.")
+        json_mode = getattr(args, "json", False)
+        if json_mode:
+            import json
+            print(json.dumps({
+                "status": "gate_failed",
+                "missing_selections": ["name"],
+                "help": {"name": "brand-box select name <value>"},
+            }, indent=2))
+        else:
+            _error("No name selected. Run 'brand-box select name <name>' first, or pass --name.")
+            if project.name_candidates:
+                _print("  Available candidates:")
+                for n in project.name_candidates:
+                    _print(f"    • {n}")
         sys.exit(1)
 
     from brand_box.generators.logo import LogoGenerator
@@ -221,8 +308,32 @@ def cmd_logo(args: argparse.Namespace) -> None:
         existing_ids = {c.id for c in gen.last_concepts}
         project.logo_concepts = [c for c in project.logo_concepts if c.id not in existing_ids]
         project.logo_concepts.extend(gen.last_concepts)
+
     project.save(Path.cwd() / "brand.json")
-    _success(f"{len(paths)} logo(s) saved to {dirs['logos']}")
+
+    if args.json:
+        import json
+        from dataclasses import asdict
+        print(json.dumps({
+            "status": "awaiting_selection",
+            "stage": "logo",
+            "options": [
+                {"index": i + 1, "path": p, **(asdict(gen.last_concepts[i]) if gen.last_concepts and i < len(gen.last_concepts) else {})}
+                for i, p in enumerate(paths)
+            ],
+            "next_step": "brand-box select logo <index>",
+        }, indent=2))
+    else:
+        for i, p in enumerate(paths, 1):
+            line = f"  {i}. {p}"
+            if gen.last_concepts and i - 1 < len(gen.last_concepts):
+                concept = gen.last_concepts[i - 1]
+                if concept.style:
+                    line += f" ({concept.style})"
+            _print(line)
+        _print("")
+        _success(f"{len(paths)} logo(s) saved. Select one to continue:")
+        _print("  brand-box select logo <number>")
 
 
 def cmd_identity(args: argparse.Namespace) -> None:
@@ -231,11 +342,13 @@ def cmd_identity(args: argparse.Namespace) -> None:
     if not project:
         return
 
+    _require_gate(project, need_name=True)
+
     from brand_box.generators.identity import IdentityGenerator
     gen = IdentityGenerator()
 
-    name = project.name or (project.name_candidates[0] if project.name_candidates else "")
-    _print(f"Generating brand identity for: {name or project.concept}")
+    name = project.selected_name
+    _print(f"Generating brand identity for: {name}")
 
     identity, direction = gen.generate_rich(concept=project.concept, name=name)
     project.identity = identity
@@ -266,6 +379,8 @@ def cmd_website(args: argparse.Namespace) -> None:
     project = _load_project()
     if not project:
         return
+
+    _require_gate(project, need_name=True, need_logo=True)
 
     from brand_box.generators.website import WebsiteGenerator
     gen = WebsiteGenerator()
@@ -313,6 +428,8 @@ def cmd_social(args: argparse.Namespace) -> None:
     if not project:
         return
 
+    _require_gate(project, need_name=True, need_logo=True)
+
     from brand_box.generators.social import SocialGenerator
     gen = SocialGenerator()
     dirs = project.ensure_output_dirs()
@@ -339,6 +456,8 @@ def cmd_kit(args: argparse.Namespace) -> None:
     if not project:
         return
 
+    _require_gate(project, need_name=True, need_logo=True)
+
     from brand_box.generators.kit import KitGenerator
     gen = KitGenerator()
     dirs = project.ensure_output_dirs()
@@ -356,7 +475,14 @@ def cmd_video(args: argparse.Namespace) -> None:
     if not project:
         return
 
-    name = project.name or (project.name_candidates[0] if project.name_candidates else "Brand")
+    _require_gate(
+        project,
+        need_name=True,
+        need_logo=True,
+        json_mode=getattr(args, "json", False),
+    )
+
+    name = project.selected_name
     dirs = project.ensure_output_dirs()
     fmt_id = args.format or "teaser"
     music_arg = args.music
@@ -431,7 +557,7 @@ def cmd_video(args: argparse.Namespace) -> None:
             if MANUS_API_KEY:
                 _print("Generating video via Manus AI…")
                 manus = ManusVideoGenerator()
-                logo_path = project.metadata.get("chosen_logo") or (project.logo_paths[0] if project.logo_paths else None)
+                logo_path = project.selected_logo
                 result_path = manus.generate_video(
                     brand_name=name,
                     concept=project.concept,
@@ -600,6 +726,87 @@ def cmd_video(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_select(args: argparse.Namespace) -> None:
+    """Lock a name or logo selection (decision gate).
+
+    This is the mechanism that bridges generation and downstream stages.
+    An orchestrating agent should call this after presenting options to
+    the user and receiving a decision.
+    """
+    project = _load_project()
+    if not project:
+        return
+
+    target = args.target
+    value = args.value
+
+    if target == "name":
+        all_names = project.name_candidates or [c.name for c in project.naming_candidates]
+        if all_names and value not in all_names:
+            # Try case-insensitive match
+            match = next((n for n in all_names if n.lower() == value.lower()), None)
+            if match:
+                value = match
+            else:
+                _error(f"'{value}' not found in candidates.")
+                _print("  Available:")
+                for n in all_names:
+                    _print(f"    • {n}")
+                _print("  Use exact name or generate more: brand-box name")
+                sys.exit(1)
+
+        project.selected_name = value
+        project.name = value  # keep legacy field in sync
+        project.save(Path.cwd() / "brand.json")
+
+        if args.json:
+            import json
+            print(json.dumps({
+                "status": "selected",
+                "stage": "name",
+                "selected": value,
+            }, indent=2))
+        else:
+            _success(f"Name locked: {value}")
+            _print("  Next: brand-box logo")
+
+    elif target == "logo":
+        # Accept 1-based index or file path
+        try:
+            idx = int(value) - 1
+            if not project.logo_paths:
+                _error("No logos generated yet. Run 'brand-box logo' first.")
+                sys.exit(1)
+            if 0 <= idx < len(project.logo_paths):
+                selected_path = project.logo_paths[idx]
+            else:
+                _error(f"Index {int(value)} out of range (1–{len(project.logo_paths)}).")
+                for i, p in enumerate(project.logo_paths, 1):
+                    _print(f"  {i}. {p}")
+                sys.exit(1)
+        except ValueError:
+            # Treat as file path
+            if Path(value).exists():
+                selected_path = str(Path(value).resolve())
+            else:
+                _error(f"Path not found: {value}")
+                sys.exit(1)
+
+        project.selected_logo = selected_path
+        project.save(Path.cwd() / "brand.json")
+
+        if args.json:
+            import json
+            print(json.dumps({
+                "status": "selected",
+                "stage": "logo",
+                "selected": selected_path,
+            }, indent=2))
+        else:
+            _success(f"Logo locked: {selected_path}")
+            _print("  Next: brand-box identity")
+
+
 def cmd_content_plan(args: argparse.Namespace) -> None:
     """Generate a content production plan."""
     import json
@@ -706,17 +913,25 @@ def build_parser() -> argparse.ArgumentParser:
     # name
     p_name = sub.add_parser("name", help="Generate brand name candidates")
     p_name.add_argument("--count", type=int, default=10, help="Number of candidates")
+    p_name.add_argument("--json", action="store_true", help="Output as JSON (includes awaiting_selection status)")
 
     # logo
     p_logo = sub.add_parser("logo", help="Generate logo options")
-    p_logo.add_argument("--name", help="Brand name (override)")
+    p_logo.add_argument("--name", help="Brand name (override — bypasses name selection gate)")
     p_logo.add_argument("--count", type=int, default=3, help="Number of logo variants")
+    p_logo.add_argument("--json", action="store_true", help="Output as JSON (includes awaiting_selection status)")
 
     # identity
     sub.add_parser("identity", help="Generate brand identity (colors, fonts, tone)")
 
     # kit (after locking name + identity + logo)
     sub.add_parser("kit", help="Generate brand guidelines / brand kit page")
+
+    # select (decision gate)
+    p_select = sub.add_parser("select", help="Lock a name or logo selection (decision gate)")
+    p_select.add_argument("target", choices=["name", "logo"], help="What to select")
+    p_select.add_argument("value", help="Name string or logo index (1-based) / file path")
+    p_select.add_argument("--json", action="store_true", help="Output as JSON")
 
     # website
     p_website = sub.add_parser("website", help="Generate a landing page")
@@ -773,6 +988,7 @@ def main() -> None:
     commands = {
         "init": cmd_init,
         "name": cmd_name,
+        "select": cmd_select,
         "logo": cmd_logo,
         "identity": cmd_identity,
         "kit": cmd_kit,

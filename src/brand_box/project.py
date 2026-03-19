@@ -167,12 +167,12 @@ class BrandProject:
 
     @property
     def active_logo_path(self) -> str:
-        """Return the selected logo path if present."""
+        """Return the selected logo path — empty if nothing explicitly selected."""
         if self.selected_logo:
             return self.selected_logo
         if self.metadata.get("chosen_logo"):
             return str(self.metadata["chosen_logo"])
-        return self.logo_paths[0] if self.logo_paths else ""
+        return ""
 
 
 T = TypeVar("T")
