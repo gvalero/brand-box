@@ -271,19 +271,40 @@ def cmd_website(args: argparse.Namespace) -> None:
     gen = WebsiteGenerator()
     dirs = project.ensure_output_dirs()
 
-    _print("Generating landing page…")
-    path = gen.generate(project=project, output_dir=str(dirs["website"]))
-    project.website_path = path
-    if gen.last_specs:
-        existing_ids = {spec.id for spec in gen.last_specs}
-        project.website_specs = [spec for spec in project.website_specs if spec.id not in existing_ids]
-        project.website_specs.extend(gen.last_specs)
-    if gen.last_spec:
-        project.selected_website_spec = gen.last_spec.id
-        _print(f"  Selected direction: {gen.last_spec.visual_direction}")
-        _print(f"  Website score: {gen.last_spec.review.score:.2f}")
-    project.save(Path.cwd() / "brand.json")
-    _success(f"Landing page saved to {path}")
+    output_dir = args.output_dir if hasattr(args, "output_dir") and args.output_dir else str(dirs["website"])
+    variants = hasattr(args, "variants") and args.variants
+    filenames = None
+    if hasattr(args, "filenames") and args.filenames:
+        filenames = [f.strip() for f in args.filenames.split(",")]
+
+    if variants:
+        _print("Generating landing page variants…")
+        paths = gen.generate_all(project=project, output_dir=output_dir, filenames=filenames)
+        project.website_path = paths[-1]  # index.html is last
+        if gen.last_specs:
+            existing_ids = {spec.id for spec in gen.last_specs}
+            project.website_specs = [spec for spec in project.website_specs if spec.id not in existing_ids]
+            project.website_specs.extend(gen.last_specs)
+        if gen.last_spec:
+            project.selected_website_spec = gen.last_spec.id
+        project.save(Path.cwd() / "brand.json")
+        for i, (spec, path) in enumerate(zip(gen.last_specs, paths[:-1])):
+            _print(f"  Variant {i + 1}: {spec.visual_direction} (score: {spec.review.score:.2f})")
+        _success(f"{len(paths)} landing pages saved to {output_dir}")
+    else:
+        _print("Generating landing page…")
+        path = gen.generate(project=project, output_dir=output_dir)
+        project.website_path = path
+        if gen.last_specs:
+            existing_ids = {spec.id for spec in gen.last_specs}
+            project.website_specs = [spec for spec in project.website_specs if spec.id not in existing_ids]
+            project.website_specs.extend(gen.last_specs)
+        if gen.last_spec:
+            project.selected_website_spec = gen.last_spec.id
+            _print(f"  Selected direction: {gen.last_spec.visual_direction}")
+            _print(f"  Website score: {gen.last_spec.review.score:.2f}")
+        project.save(Path.cwd() / "brand.json")
+        _success(f"Landing page saved to {path}")
 
 
 def cmd_social(args: argparse.Namespace) -> None:
@@ -698,7 +719,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("kit", help="Generate brand guidelines / brand kit page")
 
     # website
-    sub.add_parser("website", help="Generate a landing page")
+    p_website = sub.add_parser("website", help="Generate a landing page")
+    p_website.add_argument("--variants", action="store_true", help="Render all variants to separate files (+ index.html as best)")
+    p_website.add_argument("--filenames", help="Comma-separated filenames for variants (e.g. a.html,b.html,c.html)")
+    p_website.add_argument("--output-dir", help="Override output directory")
 
     # social
     p_social = sub.add_parser("social", help="Generate social media profile assets")

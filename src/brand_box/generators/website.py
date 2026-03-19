@@ -172,6 +172,48 @@ class WebsiteGenerator:
         logger.info("Landing page saved to %s", index_path)
         return str(index_path)
 
+    def generate_all(
+        self,
+        project: BrandProject,
+        output_dir: str,
+        filenames: list[str] | None = None,
+    ) -> list[str]:
+        """Render every variant to a separate HTML file.
+
+        Args:
+            project: The brand project.
+            output_dir: Directory for output files.
+            filenames: Optional list of filenames (e.g. ["a.html", "b.html", "c.html"]).
+                       Defaults to variant_{n}.html if not provided.
+
+        Returns: List of paths to generated HTML files.
+        """
+        specs = self.generate_variants(project, count=3)
+        self.last_specs = specs
+        self.last_spec = self.select_best_spec(specs)
+
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+
+        default_names = [f"variant_{i + 1}.html" for i in range(len(specs))]
+        names = filenames if filenames and len(filenames) >= len(specs) else default_names
+        paths: list[str] = []
+
+        for spec, name in zip(specs, names):
+            html = self._render_html(project, spec)
+            file_path = out / name
+            file_path.write_text(html, encoding="utf-8")
+            paths.append(str(file_path))
+            logger.info("Landing page variant saved to %s", file_path)
+
+        # Also write index.html as the best variant
+        best_html = self._render_html(project, self.last_spec)
+        index_path = out / "index.html"
+        index_path.write_text(best_html, encoding="utf-8")
+        paths.append(str(index_path))
+
+        return paths
+
     def _generate_spec(self, project: BrandProject) -> WebsiteSpec:
         """Build a typed website spec for the current project."""
         return self._strategist.build_spec(project)
