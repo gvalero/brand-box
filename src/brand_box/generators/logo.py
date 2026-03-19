@@ -8,18 +8,40 @@ Falls back to Pillow-based template logos if AI generation is unavailable.
 from __future__ import annotations
 
 import logging
+import uuid
 from pathlib import Path
 from typing import Optional
 
 from PIL import Image, ImageDraw, ImageFont
 
+from brand_box.models.artifacts import LogoConcept, StageReview
 from brand_box.project import BrandIdentity
 
 logger = logging.getLogger(__name__)
 
+# Short rationale descriptions keyed by style keyword
+_STYLE_RATIONALES: dict[str, str] = {
+    "app icon": "Modern app icon style with gradient",
+    "wordmark": "Clean wordmark with minimalist typography",
+    "mascot": "Playful mascot character logo",
+    "geometric": "Bold abstract geometric mark",
+    "watercolor": "Organic hand-drawn watercolor style",
+}
+
+
+def _rationale_for(style: str) -> str:
+    """Derive a short rationale string from the style description."""
+    for keyword, rationale in _STYLE_RATIONALES.items():
+        if keyword in style.lower():
+            return rationale
+    return f"Logo variant: {style[:60]}"
+
 
 class LogoGenerator:
     """Generate logo images for a brand."""
+
+    def __init__(self) -> None:
+        self.last_concepts: list[LogoConcept] = []
 
     def generate(
         self,
@@ -30,10 +52,25 @@ class LogoGenerator:
         count: int = 3,
     ) -> list[str]:
         """Generate *count* logo variants and return their file paths."""
+        concepts = self.generate_rich(
+            brand_name, concept, identity=identity,
+            output_dir=output_dir, count=count,
+        )
+        return [p for c in concepts for p in c.asset_paths]
+
+    def generate_rich(
+        self,
+        brand_name: str,
+        concept: str,
+        identity: Optional[BrandIdentity] = None,
+        output_dir: str = "output/logos",
+        count: int = 3,
+    ) -> list[LogoConcept]:
+        """Generate *count* logo variants wrapped in :class:`LogoConcept` objects."""
         out = Path(output_dir)
         out.mkdir(parents=True, exist_ok=True)
 
-        paths: list[str] = []
+        concepts: list[LogoConcept] = []
         styles = self._logo_styles()[:count]
 
         for i, style in enumerate(styles):
@@ -43,14 +80,22 @@ class LogoGenerator:
             try:
                 from brand_box.generators.image_backend import generate_image
                 generate_image(prompt, path)
-                paths.append(path)
                 logger.info("AI logo %d saved to %s", i + 1, path)
             except Exception as e:
                 logger.warning("AI logo generation failed: %s — using template", e)
                 self._generate_template(brand_name, identity, path, style)
-                paths.append(path)
 
-        return paths
+            logo_concept = LogoConcept(
+                id=f"logo-{uuid.uuid4().hex[:8]}",
+                style=style,
+                prompt=prompt,
+                rationale=_rationale_for(style),
+                asset_paths=[path],
+            )
+            concepts.append(logo_concept)
+
+        self.last_concepts = concepts
+        return concepts
 
     @staticmethod
     def _logo_styles() -> list[str]:

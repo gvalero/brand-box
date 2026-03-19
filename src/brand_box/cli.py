@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 from brand_box import __version__
+from brand_box.models.artifacts import BrandBrief
 from brand_box.project import BrandProject
 
 try:
@@ -56,6 +57,88 @@ def _success(msg: str) -> None:
 # Commands
 # ---------------------------------------------------------------------------
 
+def _parse_brief(concept: str) -> BrandBrief:
+    """Derive a lightweight BrandBrief from a concept string (no LLM)."""
+    import re
+
+    text = concept.strip()
+    first_sentence = re.split(r"(?<=[.!?])\s+", text, maxsplit=1)[0]
+
+    # --- audience ---
+    audience: list[str] = []
+    audience_patterns = [
+        r"\bfor\s+([\w\s]+?)(?:\s+(?:who|that|to|,|\.)|$)",
+        r"\btargeting\s+([\w\s]+?)(?:\s+(?:who|that|to|,|\.)|$)",
+        r"\baimed\s+at\s+([\w\s]+?)(?:\s+(?:who|that|to|,|\.)|$)",
+    ]
+    for pat in audience_patterns:
+        for m in re.finditer(pat, text, re.IGNORECASE):
+            segment = m.group(1).strip()
+            if segment and len(segment.split()) <= 6:
+                audience.append(segment)
+
+    # --- problem ---
+    problem = ""
+    problem_patterns = [
+        r"\b(?:solves?|address(?:es)?|fix(?:es)?|helps?\s+with)\s+(.+?)(?:\.|$)",
+        r"\b(?:struggle|pain\s*point|challenge|issue)\s+(?:of|with)\s+(.+?)(?:\.|$)",
+    ]
+    for pat in problem_patterns:
+        m = re.search(pat, text, re.IGNORECASE)
+        if m:
+            problem = m.group(1).strip()
+            break
+
+    # --- category ---
+    category = ""
+    category_map: dict[str, str] = {
+        "app": "software",
+        "platform": "software",
+        "saas": "software",
+        "software": "software",
+        "tool": "software",
+        "api": "software",
+        "website": "software",
+        "book": "publishing",
+        "magazine": "publishing",
+        "newsletter": "publishing",
+        "food": "consumer goods",
+        "drink": "consumer goods",
+        "beverage": "consumer goods",
+        "snack": "consumer goods",
+        "clothing": "fashion",
+        "apparel": "fashion",
+        "fashion": "fashion",
+        "fitness": "health & wellness",
+        "health": "health & wellness",
+        "wellness": "health & wellness",
+        "game": "entertainment",
+        "music": "entertainment",
+        "film": "entertainment",
+        "podcast": "media",
+        "blog": "media",
+        "agency": "professional services",
+        "consulting": "professional services",
+        "studio": "creative services",
+        "course": "education",
+        "learning": "education",
+        "education": "education",
+    }
+    lower = text.lower()
+    for keyword, cat in category_map.items():
+        if re.search(rf"\b{re.escape(keyword)}\b", lower):
+            category = cat
+            break
+
+    return BrandBrief(
+        product=first_sentence,
+        audience=audience,
+        problem=problem,
+        category=category,
+        goals=["Build brand awareness", "Validate demand"],
+    )
+
+
 def cmd_init(args: argparse.Namespace) -> None:
     """Initialize a new brand project."""
     project_dir = Path(args.output or ".").resolve()
@@ -66,6 +149,7 @@ def cmd_init(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     project = BrandProject(concept=args.concept)
+    project.brief = _parse_brief(args.concept)
     project_dir.mkdir(parents=True, exist_ok=True)
     project.save(brand_file)
     project.ensure_output_dirs()
@@ -88,15 +172,21 @@ def cmd_name(args: argparse.Namespace) -> None:
         return
 
     from brand_box.generators.name import NameGenerator
+    from brand_box.models.artifacts import NameCandidate
     gen = NameGenerator()
     count = args.count or 10
 
     _print(f"Generating {count} name candidates for: {project.concept}")
-    names = gen.generate(project.concept, count=count)
-    project.name_candidates = names
+    candidates = gen.generate_rich(project.concept, count=count)
+    names = [c.name for c in candidates]
+    project.name_candidates = names  # legacy string list
+    project.naming_candidates = candidates  # rich typed list
 
-    for i, name in enumerate(names, 1):
-        _print(f"  {i:2d}. {name}")
+    for c in candidates:
+        line = f"  • {c.name}"
+        if c.rationale:
+            line += f" — {c.rationale}"
+        _print(line)
 
     project.save(Path.cwd() / "brand.json")
     _success(f"{len(names)} name candidates saved to brand.json")
@@ -127,6 +217,10 @@ def cmd_logo(args: argparse.Namespace) -> None:
         count=count,
     )
     project.logo_paths = paths
+    if gen.last_concepts:
+        existing_ids = {c.id for c in gen.last_concepts}
+        project.logo_concepts = [c for c in project.logo_concepts if c.id not in existing_ids]
+        project.logo_concepts.extend(gen.last_concepts)
     project.save(Path.cwd() / "brand.json")
     _success(f"{len(paths)} logo(s) saved to {dirs['logos']}")
 
@@ -143,8 +237,9 @@ def cmd_identity(args: argparse.Namespace) -> None:
     name = project.name or (project.name_candidates[0] if project.name_candidates else "")
     _print(f"Generating brand identity for: {name or project.concept}")
 
-    identity = gen.generate(concept=project.concept, name=name)
+    identity, direction = gen.generate_rich(concept=project.concept, name=name)
     project.identity = identity
+    project.brand_direction = direction
     project.save(Path.cwd() / "brand.json")
 
     _print(f"  Primary:    {identity.primary_color}")
@@ -155,6 +250,14 @@ def cmd_identity(args: argparse.Namespace) -> None:
     _print(f"  Body:       {identity.font_body}")
     _print(f"  Tone:       {identity.tone}")
     _print(f"  Tagline:    {identity.tagline}")
+    if direction.positioning:
+        _print(f"  Positioning: {direction.positioning}")
+    if direction.personality:
+        _print(f"  Personality: {', '.join(direction.personality)}")
+    if direction.messaging_pillars:
+        _print(f"  Messaging:   {', '.join(direction.messaging_pillars)}")
+    if direction.imagery_keywords:
+        _print(f"  Imagery:     {', '.join(direction.imagery_keywords)}")
     _success("Brand identity saved to brand.json")
 
 
@@ -325,7 +428,18 @@ def cmd_video(args: argparse.Namespace) -> None:
                 )
                 project.video_paths.append(result_path)
                 project.save(Path.cwd() / "brand.json")
-                _success(f"Video saved to {result_path}")
+                if args.json:
+                    import json
+                    print(json.dumps({
+                        "video_path": result_path,
+                        "format": fmt_id,
+                        "profile": profile,
+                        "storyboard_id": storyboard.id,
+                        "storyboard_score": storyboard.review.score,
+                        "music_plan_id": music_plan.id,
+                    }, indent=2))
+                else:
+                    _success(f"Video saved to {result_path}")
                 return
         except Exception as e:
             _print(f"  Manus failed: {e} — falling back to local pipeline")
@@ -448,10 +562,93 @@ def cmd_video(args: argparse.Namespace) -> None:
         )
         project.video_paths.append(result_path)
         project.save(Path.cwd() / "brand.json")
-        _success(f"Video saved to {result_path}")
+        if args.json:
+            import json
+            print(json.dumps({
+                "video_path": result_path,
+                "format": fmt_id,
+                "profile": profile,
+                "storyboard_id": storyboard.id,
+                "storyboard_score": storyboard.review.score,
+                "music_plan_id": music_plan.id,
+            }, indent=2))
+        else:
+            _success(f"Video saved to {result_path}")
     except Exception as e:
         _error(f"Video assembly failed: {e}")
         sys.exit(1)
+
+
+def cmd_content_plan(args: argparse.Namespace) -> None:
+    """Generate a content production plan."""
+    import json
+    from brand_box.planner import ContentPlanner
+
+    project = _load_project()
+    planner = ContentPlanner()
+
+    formats = args.formats.split(",") if args.formats else None
+    profiles = args.profiles.split(",") if args.profiles else None
+
+    plan = planner.plan(
+        project=project,
+        count=args.count,
+        formats=formats,
+        profiles=profiles,
+    )
+
+    if args.json:
+        from brand_box.planner import plan_to_json
+        print(plan_to_json(plan))
+    else:
+        _print(f"Content plan: {len(plan)} video(s)")
+        for i, job in enumerate(plan, 1):
+            _print(f"  {i}. {job['format_id']}/{job['profile']} — angle: {job['hook_angle']}")
+
+
+def cmd_render(args: argparse.Namespace) -> None:
+    """Render a single video (agent-friendly wrapper around video pipeline)."""
+    # Reuse cmd_video logic but with structured output
+    args.local = True  # render always uses local pipeline
+    if not hasattr(args, 'no_images'):
+        args.no_images = False
+    if not hasattr(args, 'no_audio'):
+        args.no_audio = False
+    cmd_video(args)
+
+
+def cmd_evaluate(args: argparse.Namespace) -> None:
+    """Evaluate the last produced video storyboard."""
+    import json
+    from brand_box.evaluators.creative import VideoEvaluator
+
+    project = _load_project()
+    if not project.storyboards:
+        _error("No storyboards found. Run 'brand-box video' first.")
+        sys.exit(1)
+
+    evaluator = VideoEvaluator()
+    storyboard = project.storyboards[-1]  # evaluate most recent
+    review = evaluator.evaluate(storyboard)
+
+    if args.json:
+        print(json.dumps({
+            "storyboard_id": storyboard.id,
+            "score": review.score,
+            "subscores": review.subscores,
+            "issues": review.issues,
+            "recommendation": review.recommendation,
+        }, indent=2))
+    else:
+        _print(f"Storyboard: {storyboard.id}")
+        _print(f"  Score: {review.score:.2f}")
+        _print(f"  Recommendation: {review.recommendation}")
+        for name, value in review.subscores.items():
+            _print(f"  {name}: {value:.2f}")
+        if review.issues:
+            _print(f"  Issues:")
+            for issue in review.issues:
+                _print(f"    - {issue}")
 
 
 # ---------------------------------------------------------------------------
@@ -516,6 +713,31 @@ def build_parser() -> argparse.ArgumentParser:
     p_video.add_argument("--local", action="store_true", help="Force local pipeline (skip Manus)")
     p_video.add_argument("--no-images", action="store_true", help="Skip AI image generation (local pipeline only)")
     p_video.add_argument("--no-audio", action="store_true", help="Skip audio generation (local pipeline only)")
+    p_video.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # content-plan
+    p_plan = sub.add_parser("content-plan", help="Generate a content production plan")
+    p_plan.add_argument("--count", type=int, default=3, help="Number of videos to plan")
+    p_plan.add_argument("--formats", help="Comma-separated formats (teaser,explainer,...)")
+    p_plan.add_argument("--profiles", help="Comma-separated profiles (reel,square,...)")
+    p_plan.add_argument("--json", action="store_true", help="Output as JSON")
+    p_plan.set_defaults(func=cmd_content_plan)
+
+    # render
+    p_render = sub.add_parser("render", help="Render a single video (agent-friendly)")
+    p_render.add_argument("--format", choices=["teaser", "explainer", "testimonial", "fact", "founder"], default="teaser")
+    p_render.add_argument("--profile", choices=["reel", "square", "web-hero", "youtube"], default="reel")
+    p_render.add_argument("--music", help="Background music track path")
+    p_render.add_argument("--music-dir", help="Folder to auto-pick music from")
+    p_render.add_argument("--no-images", action="store_true", help="Reuse cached images")
+    p_render.add_argument("--no-audio", action="store_true", help="Reuse cached audio")
+    p_render.add_argument("--json", action="store_true", help="Output as JSON")
+    p_render.set_defaults(func=cmd_render)
+
+    # evaluate
+    p_eval = sub.add_parser("evaluate", help="Evaluate the last video storyboard")
+    p_eval.add_argument("--json", action="store_true", help="Output as JSON")
+    p_eval.set_defaults(func=cmd_evaluate)
 
     return parser
 
@@ -533,6 +755,9 @@ def main() -> None:
         "website": cmd_website,
         "social": cmd_social,
         "video": cmd_video,
+        "content-plan": cmd_content_plan,
+        "render": cmd_render,
+        "evaluate": cmd_evaluate,
     }
     commands[args.command](args)
 
