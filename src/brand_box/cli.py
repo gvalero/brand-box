@@ -268,10 +268,9 @@ def cmd_video(args: argparse.Namespace) -> None:
     if not storyboard_variants:
         _error("No storyboard variants were generated. Check your model configuration or try again.")
         sys.exit(1)
-    if storyboard_variants:
-        existing_ids = {sb.id for sb in storyboard_variants}
-        project.storyboards = [sb for sb in project.storyboards if sb.id not in existing_ids]
-        project.storyboards.extend(storyboard_variants)
+    existing_ids = {sb.id for sb in storyboard_variants}
+    project.storyboards = [sb for sb in project.storyboards if sb.id not in existing_ids]
+    project.storyboards.extend(storyboard_variants)
     storyboard = script_gen.select_best_storyboard(storyboard_variants)
     script = script_gen.storyboard_to_script(storyboard, format_id=fmt_id)
     _print(f"  Selected hook angle: {storyboard.angle}")

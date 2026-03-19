@@ -180,16 +180,19 @@ class VideoAssembler:
             try:
                 source_music_clip = AudioFileClip(background_music_path)
                 audio_resources.append(source_music_clip)
-                music_clip = self._loop_audio_to_duration(source_music_clip, final_video.duration, concatenate_audioclips)
-                music_clip = music_clip.subclipped(0, final_video.duration)
-                music_clip = music_clip.with_effects([
+                looped = self._loop_audio_to_duration(source_music_clip, final_video.duration, concatenate_audioclips)
+                audio_resources.append(looped)
+                trimmed = looped.subclipped(0, final_video.duration)
+                audio_resources.append(trimmed)
+                faded = trimmed.with_effects([
                     afx.AudioFadeIn(min(0.8, final_video.duration / 6)),
                     afx.AudioFadeOut(min(1.0, final_video.duration / 5)),
                 ])
+                audio_resources.append(faded)
                 if audio_layers:
-                    music_clip = music_clip.with_volume_scaled(0.14)
+                    music_clip = faded.with_volume_scaled(0.14)
                 else:
-                    music_clip = music_clip.with_volume_scaled(0.22)
+                    music_clip = faded.with_volume_scaled(0.22)
                 audio_layers.insert(0, music_clip)
                 audio_resources.append(music_clip)
             except Exception:
@@ -393,7 +396,7 @@ class VideoAssembler:
         if len(valid_paths) == 1:
             return self._create_scene_clip(valid_paths[0], text, duration, scene, scene_number, scene_count)
 
-        clips = []
+        asset_clips = []
         per_asset = max(0.6, duration / len(valid_paths))
         for asset_i, path in enumerate(valid_paths):
             beat_scene = dict(scene)
@@ -410,12 +413,19 @@ class VideoAssembler:
                 scene_number=scene_number,
                 scene_count=scene_count,
             )
-            clips.append(asset_clip)
+            asset_clips.append(asset_clip)
 
         try:
-            return concatenate_videoclips(clips, method="compose", padding=-0.08)
+            combined = concatenate_videoclips(asset_clips, method="compose", padding=-0.08)
         except TypeError:
-            return concatenate_videoclips(clips, method="compose")
+            combined = concatenate_videoclips(asset_clips, method="compose")
+        # Close intermediate clips — the concatenated result holds the data
+        for ac in asset_clips:
+            try:
+                ac.close()
+            except Exception:
+                pass
+        return combined
 
     # ------------------------------------------------------------------
     # Helpers
@@ -592,15 +602,24 @@ class VideoAssembler:
         if audio_clip.duration >= duration:
             return audio_clip
         loops = []
+        partials = []
         remaining = duration
         while remaining > 0:
             if remaining >= audio_clip.duration:
                 loops.append(audio_clip)
                 remaining -= audio_clip.duration
             else:
-                loops.append(audio_clip.subclipped(0, remaining))
+                partial = audio_clip.subclipped(0, remaining)
+                partials.append(partial)
+                loops.append(partial)
                 remaining = 0
-        return concatenate_audioclips(loops)
+        result = concatenate_audioclips(loops)
+        for p in partials:
+            try:
+                p.close()
+            except Exception:
+                pass
+        return result
 
     def _scale(self, value: int, axis: str = "min") -> int:
         """Scale a design value from the base 1080x1920 canvas."""
