@@ -5,6 +5,7 @@ output/
 .audio_cache/
 .image_cache/
 brand.json
+tmp/
 
 # Python
 __pycache__/
