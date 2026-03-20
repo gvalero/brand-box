@@ -65,6 +65,7 @@ class BrandProject:
     selected_music_plan: str = ""
     reviews: list[StageReview] = field(default_factory=list)
     run_history: list[dict[str, Any]] = field(default_factory=list)
+    archived_artifacts: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     # --- I/O ---
@@ -102,6 +103,7 @@ class BrandProject:
         payload["brand_direction"] = _coerce_dataclass(BrandDirection, payload.get("brand_direction"))
         payload["reviews"] = _coerce_list(StageReview, payload.get("reviews"))
         payload["run_history"] = payload.get("run_history") or []
+        payload["archived_artifacts"] = payload.get("archived_artifacts") or []
         payload["social_profiles"] = payload.get("social_profiles") or {}
         payload["metadata"] = payload.get("metadata") or {}
         payload["video_paths"] = payload.get("video_paths") or []

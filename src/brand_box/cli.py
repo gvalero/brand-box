@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from brand_box import __version__
@@ -101,6 +102,135 @@ def _require_gate(
                 else:
                     _print("  Run 'brand-box logo' first to generate options.")
     sys.exit(1)
+
+
+def _reset_identity_and_downstream(project: BrandProject) -> None:
+    """Clear artifacts that depend on the selected brand name/logo."""
+    project.identity = project.identity.__class__()
+    project.brand_direction = project.brand_direction.__class__()
+    project.website_path = ""
+    project.website_specs = []
+    project.selected_website_spec = ""
+    project.social_profiles = {}
+    project.video_paths = []
+    project.storyboards = []
+    project.music_plans = []
+    project.selected_music_plan = ""
+    project.reviews = [
+        review for review in project.reviews if review.stage not in {"logo", "identity", "website", "video", "music", "social", "kit"}
+    ]
+    project.run_history = [
+        entry
+        for entry in project.run_history
+        if entry.get("stage") not in {"logo", "identity", "website", "video", "music", "social", "kit"}
+    ]
+    project.metadata.pop("kit_path", None)
+
+
+def _archive_downstream_state(
+    project: BrandProject,
+    *,
+    reason: str,
+    previous_name: str = "",
+) -> None:
+    """Archive the current downstream branch before clearing active state."""
+    downstream_reviews = [
+        review for review in project.reviews if review.stage in {"identity", "website", "video", "music", "social", "kit", "logo"}
+    ]
+    downstream_history = [
+        entry
+        for entry in project.run_history
+        if entry.get("stage") in {"identity", "website", "video", "music", "social", "kit", "logo"}
+    ]
+    has_downstream_state = any(
+        [
+            project.selected_logo,
+            project.logo_paths,
+            project.logo_concepts,
+            any(getattr(project.identity, field, "") for field in ("primary_color", "secondary_color", "accent_color", "tone", "tagline")),
+            any(getattr(project.brand_direction, field, None) for field in ("positioning", "audience", "personality", "messaging_pillars", "tagline_options", "palette", "typography", "imagery_keywords")),
+            project.website_path,
+            project.website_specs,
+            project.selected_website_spec,
+            project.social_profiles,
+            project.video_paths,
+            project.storyboards,
+            project.music_plans,
+            project.selected_music_plan,
+            downstream_reviews,
+            downstream_history,
+            project.metadata.get("kit_path"),
+        ]
+    )
+    if not has_downstream_state:
+        return
+
+    serialized = project.to_dict()
+    serialized_reviews = [
+        review
+        for review in serialized["reviews"]
+        if review.get("stage") in {"identity", "website", "video", "music", "social", "kit", "logo"}
+    ]
+    snapshot = {
+        "archived_at": datetime.now(timezone.utc).isoformat(),
+        "reason": reason,
+        "previous_name": previous_name or project.active_name,
+        "selected_logo": project.selected_logo,
+        "logo_paths": list(project.logo_paths),
+        "logo_concepts": serialized["logo_concepts"],
+        "identity": serialized["identity"],
+        "brand_direction": serialized["brand_direction"],
+        "website_path": project.website_path,
+        "website_specs": serialized["website_specs"],
+        "selected_website_spec": project.selected_website_spec,
+        "social_profiles": project.social_profiles,
+        "video_paths": list(project.video_paths),
+        "storyboards": serialized["storyboards"],
+        "music_plans": serialized["music_plans"],
+        "selected_music_plan": project.selected_music_plan,
+        "reviews": serialized_reviews,
+        "run_history": downstream_history,
+        "metadata": {"kit_path": project.metadata.get("kit_path", "")},
+    }
+    project.archived_artifacts.append(snapshot)
+
+
+def _reset_logo_and_downstream(project: BrandProject) -> None:
+    """Clear artifacts that depend on the selected logo."""
+    project.selected_logo = ""
+    project.logo_paths = []
+    project.logo_concepts = []
+    _reset_identity_and_downstream(project)
+
+
+def _drop_first_matching_review(project: BrandProject, review_to_remove) -> None:
+    """Remove a single matching persisted review, preserving others with equal scores."""
+    if not review_to_remove:
+        return
+
+    remaining: list = []
+    removed = False
+    for item in project.reviews:
+        matches = (
+            not removed
+            and item.stage == review_to_remove.stage
+            and item.score == review_to_remove.score
+            and item.subscores == review_to_remove.subscores
+            and item.issues == review_to_remove.issues
+            and item.recommendation == review_to_remove.recommendation
+        )
+        if matches:
+            removed = True
+            continue
+        remaining.append(item)
+    project.reviews = remaining
+
+
+def _reset_name_and_downstream(project: BrandProject) -> None:
+    """Clear artifacts that depend on the selected brand name."""
+    project.selected_name = ""
+    project.name = ""
+    _reset_logo_and_downstream(project)
 
 
 # ---------------------------------------------------------------------------
@@ -235,6 +365,8 @@ def cmd_name(args: argparse.Namespace) -> None:
     _print(f"Generating {count} name candidates for: {project.concept}")
     candidates = gen.generate_rich(project.concept, count=count)
     names = [c.name for c in candidates]
+    _archive_downstream_state(project, reason="regenerated_name_candidates", previous_name=project.active_name)
+    _reset_name_and_downstream(project)
     project.name_candidates = names
     project.naming_candidates = candidates
 
@@ -296,6 +428,8 @@ def cmd_logo(args: argparse.Namespace) -> None:
     count = args.count or 3
 
     _print(f"Generating {count} logo options for: {name}")
+    _archive_downstream_state(project, reason="regenerated_logo_options", previous_name=project.active_name)
+    _reset_logo_and_downstream(project)
     paths = gen.generate(
         brand_name=name,
         concept=project.concept,
@@ -755,8 +889,13 @@ def cmd_select(args: argparse.Namespace) -> None:
                 _print("  Use exact name or generate more: brand-box name")
                 sys.exit(1)
 
-        project.selected_name = value
-        project.name = value  # keep legacy field in sync
+        if project.selected_name != value:
+            _archive_downstream_state(project, reason="selected_new_name", previous_name=project.active_name)
+            project.selected_name = value
+            project.name = value  # keep legacy field in sync
+            _reset_logo_and_downstream(project)
+        else:
+            project.name = value
         project.save(Path.cwd() / "brand.json")
 
         if args.json:
@@ -792,7 +931,13 @@ def cmd_select(args: argparse.Namespace) -> None:
                 _error(f"Path not found: {value}")
                 sys.exit(1)
 
-        project.selected_logo = selected_path
+        if project.selected_logo != selected_path:
+            _archive_downstream_state(project, reason="selected_new_logo", previous_name=project.active_name)
+            project.selected_logo = selected_path
+            _reset_identity_and_downstream(project)
+            project.selected_logo = selected_path
+        else:
+            project.selected_logo = selected_path
         project.save(Path.cwd() / "brand.json")
 
         if args.json:
@@ -857,7 +1002,13 @@ def cmd_evaluate(args: argparse.Namespace) -> None:
 
     evaluator = VideoEvaluator()
     storyboard = project.storyboards[-1]  # evaluate most recent
+    previous_review = storyboard.review
     review = evaluator.evaluate(storyboard)
+    storyboard.review = review
+    storyboard.scores = dict(review.subscores)
+    _drop_first_matching_review(project, previous_review)
+    project.reviews.append(review)
+    project.save(Path.cwd() / "brand.json")
 
     if args.json:
         print(json.dumps({
